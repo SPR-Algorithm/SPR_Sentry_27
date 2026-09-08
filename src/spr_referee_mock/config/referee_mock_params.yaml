@@ -1,0 +1,23 @@
+referee_mock:
+  ros__parameters:
+    # 与 spr_decision Topics2Blackboard 默认一致，使用相对话题名以适配 namespace
+    game_state_topic_name: "game_state"
+    # 决策树输出监控（与 spr_decision node_params 一致）
+    spin_or_not_topic_name: "spin_or_not"
+    posture_topic_name: "posture"
+    cmd_vel_topic_name: "cmd_vel"
+    cmd_vel_nav2_topic_name: "cmd_vel_nav2_result"
+    display_stale_timeout_sec: 1.0
+    publish_rate_hz: 10.0
+    # 默认模拟「对战阶段」典型数值（与 spr_sentry_serial RxData 字段语义一致）
+    current_hp: 400
+    game_progress: 4
+    stage_remain_time: 420
+    armor_id: 7
+    hurt_type: 0
+    my_outpost_hp: 1500
+    enemy_outpost_hp: 1500
+    my_base_hp: 5000
+    enemy_base_hp: 5000
+    projectile_allowance_17mm: 300
+    rfid: 0

@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+====================================================================================
+  RMUC_adaptation_2026_B.xml  —  哨兵决策（简化：仅依赖己方血量/弹量）
+  - game_progress==4 对战阶段才执行
+  - PostureChange: 1 进攻 | 2 防御 | 3 移动
+  - 不依赖敌方前哨/基地血量（协议已无该字段）
+
+  流程：
+    1. 开战 → 移动姿态前往前哨进攻位 (7.26, 3.77) → 进攻姿态
+    2. 血量<100 或 小弹丸<20 → 移动姿态回补给点 (-1.56,-5.32)
+    3. 在补给区血量>350 → 移动姿态回前哨进攻位 → 进攻姿态
+====================================================================================
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="RMUC_adaptation_2026_B">
+    <ReactiveSequence>
+      <RunOnce then_skip="true">
+        <Script code="spin_cmd:=0;
+                      at_supply:=false;
+                      at_outpost:=false"/>
+      </RunOnce>
+
+      <Topics2Blackboard target_armor_id="{target_armor_id}"
+                         tracking="{tracking}"
+                         projectile_allowance_17mm="{projectile_allowance}"
+                         enemy_outpost_hp="{enemy_outpost_hp}"
+                         my_base_hp="{my_base_hp}"
+                         my_outpost_hp="{my_outpost_hp}"
+                         armor_id="{armor_id}"
+                         target_position="{target_position}"
+                         enemy_base_hp="{enemy_base_hp}"
+                         hurt_type="{hurt_type}"
+                         stage_remain_time="{stage_remain_time}"
+                         game_progress="{game_progress}"
+                         current_hp="{current_hp}"/>
+
+      <ReactiveFallback _while="game_progress==4">
+
+        <!-- 1) 血/弹不足，或仍在补给区且血量未>350：移动姿态前往/驻守补给点 -->
+        <Sequence _while="current_hp&lt;100 || projectile_allowance&lt;20 || (at_supply==true &amp;&amp; current_hp&lt;=350)">
+          <PostureChange posture_change="3"/>
+          <Script code="spin_cmd:=0; at_supply:=true; at_outpost:=false"/>
+          <Nav2Pose name="to_supply"
+                    goal="-1.51,-5.32,0.0,0.0,0.0,0.0,0.0"/>
+        </Sequence>
+
+        <!-- 2) 补给完毕(血量>350)：移动姿态回前哨进攻位，到达后切进攻 -->
+        <Sequence _while="current_hp&gt;350 &amp;&amp; at_outpost==false">
+          <PostureChange posture_change="3"/>
+          <Script code="spin_cmd:=0; at_supply:=false"/>
+          <Nav2Pose name="to_outpost_attack"
+                    goal="7.26,3.77,0.0,0.0,0.0,0.0,0.0"/>
+          <PostureChange posture_change="1"/>
+          <Script code="at_outpost:=true"/>
+        </Sequence>
+
+        <!-- 3) 已在前哨进攻位且资源充足：保持进攻姿态 -->
+        <Sequence _while="at_outpost==true &amp;&amp; current_hp&gt;=100 &amp;&amp; projectile_allowance&gt;=20">
+          <PostureChange posture_change="1"/>
+          <Script code="spin_cmd:=0"/>
+        </Sequence>
+
+        <!-- 4) 默认：开战首次前往前哨进攻位 -->
+        <Sequence>
+          <PostureChange posture_change="3"/>
+          <Script code="spin_cmd:=0; at_supply:=false"/>
+          <Nav2Pose name="initial_to_outpost"
+                    goal="7.26,3.77,0.0,0.0,0.0,0.0,0.0"/>
+          <PostureChange posture_change="1"/>
+          <Script code="at_outpost:=true"/>
+        </Sequence>
+
+      </ReactiveFallback>
+
+      <SpinOrNot spin_or_not="{spin_cmd}"/>
+    </ReactiveSequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="AlignChassis">
+      <input_port name="target_angle" type="double"/>
+      <input_port name="min_angle_diff" type="double"/>
+      <input_port name="angular_speed" type="double"/>
+    </Action>
+    <Action ID="Nav2Pose">
+      <input_port name="goal"
+                  type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
+    </Action>
+    <Action ID="PostureChange">
+      <input_port name="posture_change" type="int">1 attack, 2 protect, 3 moving</input_port>
+    </Action>
+    <Action ID="SpinOrNot">
+      <input_port name="spin_or_not" type="int">0 or 1.</input_port>
+    </Action>
+    <Action ID="Topics2Blackboard">
+      <output_port name="target_armor_id" type="std::string"/>
+      <output_port name="tracking" type="bool"/>
+      <output_port name="projectile_allowance_17mm" type="unsigned short"/>
+      <output_port name="enemy_outpost_hp" type="unsigned short"/>
+      <output_port name="my_base_hp" type="unsigned short"/>
+      <output_port name="my_outpost_hp" type="unsigned short"/>
+      <output_port name="armor_id" type="unsigned char"/>
+      <output_port name="target_position"
+                   type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
+      <output_port name="enemy_base_hp" type="unsigned short"/>
+      <output_port name="hurt_type" type="unsigned char"/>
+      <output_port name="stage_remain_time" type="unsigned short"/>
+      <output_port name="game_progress" type="unsigned char"/>
+      <output_port name="current_hp" type="unsigned short"/>
+    </Action>
+  </TreeNodesModel>
+
+</root>

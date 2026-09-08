@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4">
+  <BehaviorTree ID="rmuc2026_test1">
+    <!-- goal 格式保持和 Nav2Pose 原来一致：x,y,z,qx,qy,qz,qw -->
+    <ReactiveSequence>
+      <RunOnce then_skip="true">
+        <Script code="spin_cmd:=0"/>
+      </RunOnce>
+      <Topics2Blackboard game_progress="{game_progress}"/>
+      <!-- 比赛状态为4才执行：先导航到点；成功后把 spin_cmd 置 1（锁存） -->
+      <Sequence _while="game_progress==1">
+        <Nav2Pose name="go_to_manual_goal"
+                  goal="1.05,-1.69,0.0,0.0,0.0,0.0,1.0"/>
+        <Script code="spin_cmd:=1"/>
+      </Sequence>
+
+      <!-- 全树只保留一个 SpinOrNot 实例，避免出现多个 publisher 抢写 -->
+      <SpinOrNot spin_or_not="{spin_cmd}"/>
+    </ReactiveSequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="Nav2Pose">
+      <input_port name="goal"
+                  type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
+    </Action>
+    <Action ID="Topics2Blackboard">
+      <output_port name="target_armor_id" type="std::string"/>
+      <output_port name="tracking" type="bool"/>
+      <output_port name="projectile_allowance_17mm" type="unsigned short"/>
+      <output_port name="enemy_outpost_hp" type="unsigned short"/>
+      <output_port name="my_base_hp" type="unsigned short"/>
+      <output_port name="my_outpost_hp" type="unsigned short"/>
+      <output_port name="armor_id" type="unsigned char"/>
+      <output_port name="target_position"
+                   type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
+      <output_port name="enemy_base_hp" type="unsigned short"/>
+      <output_port name="hurt_type" type="unsigned char"/>
+      <output_port name="stage_remain_time" type="unsigned short"/>
+      <output_port name="game_progress" type="unsigned char"/>
+      <output_port name="rfid" type="unsigned char"/>
+      <output_port name="current_hp" type="unsigned short"/>
+    </Action>
+    <Action ID="SpinOrNot">
+      <input_port name="spin_or_not" type="int">0 or 1.</input_port>
+    </Action>
+  </TreeNodesModel>
+
+</root>

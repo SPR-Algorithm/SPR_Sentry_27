@@ -1,0 +1,13 @@
+.cache/
+.vscode/
+build/
+install/
+log/
+rules/
+txt/
+*.pcd
+*.pdf
+ARCHITECTURE.html
+/*.pgm
+/*.yaml
+/*.jpeg

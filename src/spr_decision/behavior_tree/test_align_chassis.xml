@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4">
+  <BehaviorTree ID="test_align_chassis">
+    <ReactiveSequence>
+      <RunOnce then_skip="true">
+        <Script code="spin_cmd:=0"/>
+      </RunOnce>
+      <Topics2Blackboard game_progress="{game_progress}"/>
+      <Sequence _while="game_progress==0">
+        <!-- <Nav2Pose name="point1"
+                    goal="0.0,-2.2,0.0,0.0,0.0,0.0,0.0"/> -->
+        <AlignChassis name="align_chassis_to_point1"
+                      target_angle="90.0"
+                      min_angle_diff="8.0"
+                      angular_speed="15.0"/>
+        <Nav2Pose name="point2"
+                    goal="1.2,0.0,0.0,0.0,0.0,0.0,1.0"/>
+        <Nav2Pose name="point3"
+                    goal="1.2,2.0,0.0,0.0,0.0,0.0,1.0"/>
+      </Sequence>
+      <SpinOrNot spin_or_not="{spin_cmd}"/>
+    </ReactiveSequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="Nav2Pose">
+      <input_port name="goal"
+                  type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
+    </Action>
+    <Action ID="AlignChassis">
+      <input_port name="target_angle" type="double"/>
+      <input_port name="min_angle_diff" type="double"/>
+      <input_port name="angular_speed" type="double"/>
+    </Action>
+    <Action ID="PostureChange">
+      <input_port name="posture_change" type="int">posture_change (1 or 2).</input_port>
+    </Action>
+    <Action ID="Topics2Blackboard">
+      <output_port name="target_armor_id" type="std::string"/>
+      <output_port name="tracking" type="bool"/>
+      <output_port name="projectile_allowance_17mm" type="unsigned short"/>
+      <output_port name="enemy_outpost_hp" type="unsigned short"/>
+      <output_port name="my_base_hp" type="unsigned short"/>
+      <output_port name="my_outpost_hp" type="unsigned short"/>
+      <output_port name="armor_id" type="unsigned char"/>
+      <output_port name="target_position"
+                   type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
+      <output_port name="enemy_base_hp" type="unsigned short"/>
+      <output_port name="hurt_type" type="unsigned char"/>
+      <output_port name="stage_remain_time" type="unsigned short"/>
+      <output_port name="game_progress" type="unsigned char"/>
+      <output_port name="rfid" type="unsigned char"/>
+      <output_port name="current_hp" type="unsigned short"/>
+    </Action>
+    <Action ID="SpinOrNot">
+      <input_port name="spin_or_not" type="int">0 or 1.</input_port>
+    </Action>
+  </TreeNodesModel>
+
+</root>

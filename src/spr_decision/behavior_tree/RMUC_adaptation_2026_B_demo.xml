@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+====================================================================================
+  RMUC_adaptation_2026_B_demo.xml  —  B-1/B-2/B-3 实车小场地验证 Demo
+
+  目的：
+    1. 去掉正式 B 树里的“剩余时间 <= 阈值后先回家补给一次”判据；
+    2. 只要 game_progress==4，就直接验证：
+         B-1 颠簸前对准 → B-2 小距离前进 → B-3 到 HG1 后立即开小陀螺+进攻；
+    3. 使用小场地点位，避免实车测试场地不够大。
+
+  姿态 / 小陀螺：
+    PostureChange: 1 进攻 | 2 防御 | 3 移动
+    SpinOrNot    : 0 关小陀螺 | 1 开小陀螺
+
+  小场地默认点位（map 坐标，可按现场快速改）：
+    B-1 对准点     demo_pre_align : 0.60,  0.00
+    B-2 通过点     demo_cross     : 1.20,  0.00
+    B-3 高地1 HG1  demo_hg1       : 1.80,  0.00
+    巡逻点 HG2     demo_hg2       : 1.80, -0.80
+
+  高地行为：
+    到 HG1/HG2 后立刻：
+      1) 写入已到点状态；
+      2) spin_cmd:=1 并立即 SpinOrNot；
+      3) 切进攻姿态；
+      4) 短暂停留 5s；
+      5) 切换到下一个巡逻点。
+====================================================================================
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="RMUC_adaptation_2026_B_demo">
+    <ReactiveSequence>
+      <RunOnce then_skip="true">
+        <Script code="spin_cmd:=0;
+                      align_done_b:=false;
+                      bump_crossed_b:=false;
+                      demo_initial_hg1_done:=false;
+                      high_ground_arrived:=false;
+                      hg_patrol_idx:=0;
+                      hg_patrol_arrived:=false;
+                      hg_holding:=false"/>
+      </RunOnce>
+
+      <Topics2Blackboard target_armor_id="{target_armor_id}"
+                         tracking="{tracking}"
+                         projectile_allowance_17mm="{projectile_allowance}"
+                         my_base_hp="{my_base_hp}"
+                         my_outpost_hp="{my_outpost_hp}"
+                         armor_id="{armor_id}"
+                         target_position="{target_position}"
+                         enemy_base_hp="{enemy_base_hp}"
+                         hurt_type="{hurt_type}"
+                         stage_remain_time="{stage_remain_time}"
+                         game_progress="{game_progress}"
+                         current_hp="{current_hp}"/>
+
+      <ReactiveFallback _while="game_progress==4">
+
+        <!-- B-1 demo：小距离到对准点，关小陀螺，移动姿态，然后原地对准底盘 -->
+        <Sequence _while="align_done_b==false">
+          <PostureChange posture_change="3"/>
+          <Script code="spin_cmd:=0"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <Nav2Pose name="demo_b_pre_align"
+                    goal="1.60,0.00,0.0,0.0,0.0,0.0,0.0"/>
+          <AlignChassis name="demo_align_before_bump"
+                        target_angle="0.0"
+                        min_angle_diff="4.0"
+                        angular_speed="10.0"/>
+          <Script code="align_done_b:=true"/>
+        </Sequence>
+
+        <!-- B-2 demo：小距离直行，模拟通过颠簸路段（仅执行一次，bump_crossed_b 锁存） -->
+        <Sequence _while="align_done_b==true &amp;&amp; bump_crossed_b==false">
+          <PostureChange posture_change="3"/>
+          <Script code="spin_cmd:=0"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <Nav2Pose name="demo_b_cross"
+                    goal="2.20,0.00,0.0,0.0,0.0,0.0,0.0"/>
+          <Script code="bump_crossed_b:=true"/>
+        </Sequence>
+
+        <!-- B-3 demo：首次到 HG1（仅执行一次），到点后立刻开小陀螺→切进攻→停留 -->
+        <Sequence _while="bump_crossed_b==true &amp;&amp; demo_initial_hg1_done==false">
+          <Script code="hg_holding:=true"/>
+          <PostureChange posture_change="3"/>
+          <Script code="spin_cmd:=0"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <Nav2Pose name="demo_to_hg1"
+                    goal="3.80,0.00,0.0,0.0,0.0,0.0,0.0"/>
+          <Script code="high_ground_arrived:=true;
+                        hg_patrol_idx:=0;
+                        hg_patrol_arrived:=true"/>
+          <Script code="spin_cmd:=1"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <PostureChange posture_change="1"/>
+          <Sleep msec="10000"/>
+          <Script code="demo_initial_hg1_done:=true;
+                        hg_holding:=false;
+                        hg_patrol_idx:=1;
+                        hg_patrol_arrived:=false"/>
+        </Sequence>
+
+        <!-- demo 巡逻：HG1 → HG2（不再重复 B-2 过颠簸，直接点对点） -->
+        <Sequence _while="demo_initial_hg1_done==true &amp;&amp; high_ground_arrived==true &amp;&amp; hg_patrol_idx==1 &amp;&amp; (hg_patrol_arrived==false || hg_holding==true)">
+          <Script code="spin_cmd:=0"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <PostureChange posture_change="2"/>
+          <Nav2Pose name="demo_patrol_to_hg2"
+                    goal="4.80,-0.80,0.0,0.0,0.0,0.0,0.0"/>
+          <Script code="hg_holding:=true; hg_patrol_idx:=1; hg_patrol_arrived:=true"/>
+          <Script code="spin_cmd:=1"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <PostureChange posture_change="1"/>
+          <Sleep msec="10000"/>
+          <Script code="hg_holding:=false; hg_patrol_idx:=0; hg_patrol_arrived:=false"/>
+        </Sequence>
+
+        <!-- demo 巡逻：HG2 → HG1（不再重复 B-2 过颠簸，直接点对点） -->
+        <Sequence _while="demo_initial_hg1_done==true &amp;&amp; high_ground_arrived==true &amp;&amp; hg_patrol_idx==0 &amp;&amp; (hg_patrol_arrived==false || hg_holding==true)">
+          <Script code="spin_cmd:=0"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <PostureChange posture_change="2"/>
+          <Nav2Pose name="demo_patrol_to_hg1"
+                    goal="3.80,0.00,0.0,0.0,0.0,0.0,0.0"/>
+          <Script code="hg_holding:=true; hg_patrol_idx:=0; hg_patrol_arrived:=true"/>
+          <Script code="spin_cmd:=1"/>
+          <SpinOrNot spin_or_not="{spin_cmd}"/>
+          <PostureChange posture_change="1"/>
+          <Sleep msec="10000"/>
+          <Script code="hg_holding:=false; hg_patrol_idx:=1; hg_patrol_arrived:=false"/>
+        </Sequence>
+
+      </ReactiveFallback>
+
+      <SpinOrNot spin_or_not="{spin_cmd}"/>
+    </ReactiveSequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="AlignChassis">
+      <input_port name="target_angle" type="double"/>
+      <input_port name="min_angle_diff" type="double"/>
+      <input_port name="angular_speed" type="double"/>
+    </Action>
+    <Action ID="Nav2Pose">
+      <input_port name="goal"
+                  type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
+    </Action>
+    <Action ID="PostureChange">
+      <input_port name="posture_change" type="int">1 attack, 2 protect, 3 moving</input_port>
+    </Action>
+    <Action ID="SpinOrNot">
+      <input_port name="spin_or_not" type="int">0 or 1.</input_port>
+    </Action>
+    <Action ID="Topics2Blackboard">
+      <output_port name="target_armor_id" type="std::string"/>
+      <output_port name="tracking" type="bool"/>
+      <output_port name="projectile_allowance_17mm" type="unsigned short"/>
+      <output_port name="enemy_outpost_hp" type="unsigned short"/>
+      <output_port name="my_base_hp" type="unsigned short"/>
+      <output_port name="my_outpost_hp" type="unsigned short"/>
+      <output_port name="armor_id" type="unsigned char"/>
+      <output_port name="target_position"
+                   type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
+      <output_port name="enemy_base_hp" type="unsigned short"/>
+      <output_port name="hurt_type" type="unsigned char"/>
+      <output_port name="stage_remain_time" type="unsigned short"/>
+      <output_port name="game_progress" type="unsigned char"/>
+      <output_port name="current_hp" type="unsigned short"/>
+    </Action>
+  </TreeNodesModel>
+</root>

@@ -1,0 +1,59 @@
+tree_exec:
+  ros__parameters:
+    tree_node_model_export_path: /home/spr/new_ws/src/spr_decision/behavior_tree/tree_nodes.xml
+    tree_xml_file: /home/spr/new_ws/src/spr_decision/behavior_tree/RMUC_adaptation_2026_B_demo.xml
+    tick_period_milliseconds: 100
+    groot_port: 5556
+    attack_distance: 2.0
+    vehicle_dim: 0.5
+    min_obs_num: 2
+
+# Topics2Blackboard
+
+    # 用相对话题名，才能自动拼上机器人命名空间（如 /red_standard_robot1/game_state）
+    game_state_topic_name: "game_state"
+    msg_timeout_s: 2.0
+    # 没有自瞄时建议关掉订阅，避免一直 WARN
+    #subscribe_target: false
+    #target_topic_name: "tracker/target"
+
+# nav2pose
+    # goal_pub_topic: "goal_pose"
+    # planner_status_sub_topic: "compute_path_to_pose/_action/status"
+    # controller_status_sub_topic: "navigate_to_pose/_action/status"
+    send_goal_timeout_ms: 500
+
+# spin_or_not
+    spin_or_not_topic_name: "spin_or_not"
+
+# posture_change
+    posture_change_topic_name: "posture"
+
+# align_chassis
+    # target_angle: map 系下 chassis +X 轴航向角(度)，0=朝+X，90=朝+Y，-90=朝-Y，180=朝-X
+    # angular_sign: 若底盘实际转向与 cmd_vel.angular.z 相反，设为 -1.0
+    # 与 Nav2 相同：写入 fake_vel_transform 输入，由云台系转换后再发 cmd_vel
+    align_chassis_cmd_vel_topic: "cmd_vel_nav2_result"
+    align_chassis_frame: "chassis"
+    align_chassis_angular_sign: 1.0
+    align_chassis_heading_offset_deg: 0.0
+
+# # attack
+#     attack_distance: 2.0 # the distance beteen enemy and robot when attack
+#     vehicle_dim: 0.2 # determine the distance between two attack point candidates
+#     base_frame: "chassis"  #base_footprint #gimbal_yaw used for lookup transform to get robot position in map
+#     # ---- use cost map ----
+#     use_costmap: true
+#     occ_threshold: 80 # the threshold of the costmap, if the value of the cell is larger than this, it is considered as obstacle, range from 0 to 100
+#     min_obs_num: 2 # attack point candidate with more than this number of obstacles will be filtered
+#     global_frame: "map" # used for transforming the target, should be the same as the frame of the costmap or terrain_map
+#     cut_radius: 0.5 # enemy as center, obstacles within this radius will be ignored
+#     # ---- not use cost map ----
+#     # use_costmap: false
+#     # obs_pcl_topic: /terrain_map
+#     # global_frame: "odom"
+#     # obs_intensity_threshold: 0.2
+#     # cut_radius: 0.3
+
+# # spin
+#     stop_spin_slope_degree_thre: 12.0

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- game_progress: 3 倒计时 4 对战；仅写 ==4 时倒计时阶段整棵 ReactiveFallback 会被 _while 跳过、永不发导航 -->
+<!-- 逻辑：满血(400)去目标点；仅血量<=80(1/5)时标记回家；回家回血至400前持续导航至补给位；满血清标记再去目标点 -->
+<!-- HOME / 目标点坐标请按场地改 -->
+<root BTCPP_format="4">
+  <BehaviorTree ID="config_rmul2026">
+    <ReactiveSequence>
+      <RunOnce then_skip="true">
+        <Script code="return_to_base:=false"/>
+      </RunOnce>
+      <Topics2Blackboard current_hp="{current_hp}"
+                         game_progress="{game_progress}"/>
+      <ReactiveFallback _while="(game_progress==4) &amp;&amp; current_hp&gt;0">
+        <!-- 1. 临界低血量：标记需回家并发导航回家 -->
+        <Sequence _while="current_hp&lt;=80">
+          <Script code="return_to_base:=true"/>
+          <Nav2Pose name="go_home_low_hp"
+                    goal="0.0,0.0,0.0,0.0,0.0,0.0,0.0"/>
+        </Sequence>
+        <!-- 2. 已决定回家且未满血：继续导航至家（回血至400） -->
+        <Sequence _while="return_to_base==true &amp;&amp; current_hp&lt;400">
+          <Nav2Pose name="heal_at_home"
+                    goal="0.0,0.0,0.0,0.0,0.0,0.0,0.0"/>
+        </Sequence>
+        <!-- 3. 满血：清除回家标记，去占领点 -->
+        <Sequence _while="current_hp&gt;=400">
+          <Script code="return_to_base:=false"/>
+          <Nav2Pose name="patrol_waypoint"
+                    goal="1.86,5.04,0.0,0.0,0.0,0.0,0.0"/>  
+                    <!-- 1.86,5.04 -->
+        </Sequence>
+        <!-- 4. 非撤退模式下的中等血量：继续在目标点作战（不会因未撤退还剩血而误回家） -->
+        <Sequence _while="return_to_base==false">
+          <Nav2Pose name="hold_objective"
+                    goal="1.86,5.04,0.0,0.0,0.0,0.0,0.0"/>
+        </Sequence>
+      </ReactiveFallback>
+    </ReactiveSequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="Nav2Pose">
+      <input_port name="goal"
+                  type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
+    </Action>
+    <Action ID="Topics2Blackboard">
+      <output_port name="target_armor_id" type="std::string"/>
+      <output_port name="tracking" type="bool"/>
+      <output_port name="projectile_allowance_17mm" type="unsigned short"/>
+      <output_port name="enemy_outpost_hp" type="unsigned short"/>
+      <output_port name="my_base_hp" type="unsigned short"/>
+      <output_port name="my_outpost_hp" type="unsigned short"/>
+      <output_port name="armor_id" type="unsigned char"/>
+      <output_port name="target_position"
+                   type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
+      <output_port name="enemy_base_hp" type="unsigned short"/>
+      <output_port name="hurt_type" type="unsigned char"/>
+      <output_port name="stage_remain_time" type="unsigned short"/>
+      <output_port name="game_progress" type="unsigned char"/>
+      <output_port name="rfid" type="unsigned char"/>
+      <output_port name="current_hp" type="unsigned short"/>
+    </Action>
+  </TreeNodesModel>
+
+</root>

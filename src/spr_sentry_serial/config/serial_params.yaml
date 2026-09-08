@@ -1,0 +1,4 @@
+serial_node:
+  ros__parameters:
+    port_name: "/dev/ttyUSB1"   # 修改为你的雷达/底盘串口
+    baud_rate: 115200

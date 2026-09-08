@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+====================================================================================
+  RMUC_adaptation_2026_B.xml  —  分阶段哨兵决策
+  - game_progress==4 对战阶段才执行
+  - PostureChange: 1 进攻 | 2 防御 | 3 移动 | SpinOrNot: 0 关 | 1 开
+  - hg_holding / patrol_leg_active：驻守与巡逻腿进行期间保持对应 Sequence 的 _while 为真。
+  - hg_patrol_idx：当前所在点侧，1=在 HG1，0=在 HG2；与 HG 编号相反，切换时看 B-4 末尾 Script。
+  - first_hg1_done：B-3 首次上 HG1 完成后置位；避免 B-3 在 B-4 驻守期间因 hg_holding 再次抢占。
+
+  阶段划分（stage_remain_time 为裁判系统剩余时间，单位秒）：
+    > 120  : 前哨进攻 + 提前补给（不依赖敌方前哨/基地血量）
+    <= 120 : 触发回家补给一次 → 颠簸路段 → 高地双点巡逻 + 补给循环
+             当前 120 为测试阈值；实际比赛切终局应改为 <=120。
+
+  坐标说明（均使用 A 地图 yaml 坐标系）：
+    [A 已有]
+      补给点           2.3,  2.56
+      颠簸前对齐点     4.52, 0.89
+      颠簸通过后点     11.1, 0.89
+      开局前哨进攻位   10.8, 11.7
+      提前补给回前哨   11.1, 11.9
+
+    [TODO 用户填写 — 终局高地双点巡逻，旧 B 系参考 HG1(13.4,0.715) HG2(13.4,-2.38)]
+      高地巡逻点1 (HG1)  见下方 Nav2Pose hg_patrol_1 / hold_hg1 / patrol_to_hg1
+      高地巡逻点2 (HG2)  见下方 Nav2Pose hg_patrol_2 / hold_hg2 / patrol_to_hg2
+====================================================================================
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="RMUC_adaptation_2026_B">
+    <ReactiveSequence>
+      <RunOnce then_skip="true">
+        <Script code="spin_cmd:=0;
+                      early_supply:=false;
+                      initial_outpost_arrived:=false;
+                      return_outpost_arrived:=false;
+                      final_supply_done:=false;
+                      align_done_b:=false;
+                      bump_crossed_b:=false;
+                      high_ground_arrived:=false;
+                      hg_patrol_idx:=0;
+                      hg_patrol_arrived:=false;
+                      hg_holding:=false;
+                      need_resupply:=false;
+                      return_to_supply:=false;
+                      supply_loop_to_hg:=false;
+                      first_hg1_done:=false;
+                      patrol_leg_active:=false"/>
+      </RunOnce>
+
+      <Topics2Blackboard target_armor_id="{target_armor_id}"
+                         tracking="{tracking}"
+                         projectile_allowance_17mm="{projectile_allowance}"
+                         my_base_hp="{my_base_hp}"
+                         my_outpost_hp="{my_outpost_hp}"
+                         armor_id="{armor_id}"
+                         target_position="{target_position}"
+                         enemy_base_hp="{enemy_base_hp}"
+                         hurt_type="{hurt_type}"
+                         stage_remain_time="{stage_remain_time}"
+                         game_progress="{game_progress}"
+                         current_hp="{current_hp}"/>
+
+      <!-- 常规阶段锁存：弹尽或低血量 → 提前补给 -->
+      <Script _while="game_progress==4 &amp;&amp; stage_remain_time&gt;120 &amp;&amp; (projectile_allowance==0 || current_hp&lt;120)"
+              code="early_supply:=true"/>
+
+      <!-- 终局阶段锁存：高地巡逻中血/弹不足 → 需回补给 -->
+      <Script _while="game_progress==4 &amp;&amp; stage_remain_time&gt;0 &amp;&amp; stage_remain_time&lt;=120 &amp;&amp; high_ground_arrived==true &amp;&amp; return_to_supply==false &amp;&amp; (current_hp&lt;=120 || projectile_allowance&lt;=20)"
+              code="need_resupply:=true"/>
+
+      <Script _while="need_resupply==true &amp;&amp; return_to_supply==false"
+              code="spin_cmd:=0"/>
+
+      <ReactiveFallback _while="game_progress==4">
+
+        <!-- ================================================================== -->
+        <!-- 终局阶段：stage_remain_time <= 120                                -->
+        <!-- ================================================================== -->
+        <!-- 二次保护：只有 game_progress==4 时才允许用 stage_remain_time 分段 -->
+        <!-- 仅当剩余时间在 (0,120] 才进终局；stage==0 为未收到裁判数据的占位，不能进终局 -->
+        <ReactiveFallback _while="game_progress==4 &amp;&amp; stage_remain_time&gt;0 &amp;&amp; stage_remain_time&lt;=120">
+
+          <!-- B-R1) 高地巡逻中撤回补给：全程移动姿态（避免防御姿态串口延迟导致对准/过颠簸时仍为防御） -->
+          <Sequence _while="high_ground_arrived==true &amp;&amp; return_to_supply==false &amp;&amp; (need_resupply==true || current_hp&lt;=120 || projectile_allowance&lt;=20)">
+            <Script code="need_resupply:=true;
+                          spin_cmd:=0;
+                          hg_patrol_arrived:=false;
+                          hg_holding:=false;
+                          patrol_leg_active:=false"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <!-- 高地侧颠簸入口（A 坐标，与 cross_bump 同点，从高地侧接近） -->
+            <Nav2Pose name="retreat_b_bump_hg_side"
+                      goal="4.49,-7.01,0.0,0.0,0.0,0.0,0.0"/>
+            <AlignChassis name="align_retreat_bump"
+                          target_angle="0.0"
+                          min_angle_diff="8.0"
+                          angular_speed="15.0"/>
+            <!-- 过颠簸回到补给侧 -->
+            <Nav2Pose name="retreat_b_cross_bump"
+                      goal="0.928,-7.01,0.0,0.0,0.0,0.0,0.0"/>
+            <Nav2Pose name="retreat_b_supply"
+                      goal="-1.51,-5.32,0.0,0.0,0.0,0.0,0.0"/>
+            <Script code="return_to_supply:=true; need_resupply:=false"/>
+          </Sequence>
+
+          <!-- B-R2) 补给区等待：血量<=350 时驻留 -->
+          <Sequence _while="return_to_supply==true &amp;&amp; current_hp&lt;=350">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <Nav2Pose name="supply_b_wait"
+                      goal="-1.51,-5.32,0.0,0.0,0.0,0.0,0.0"/>
+          </Sequence>
+
+          <!-- B-R3) 补给完毕(血量>350)：重新过颠簸回高地；supply_loop_to_hg 仅本序列置位，勿用 hg_holding 作 _while（会与 B-3/B-4 驻守抢占） -->
+          <Sequence _while="(return_to_supply==true || supply_loop_to_hg==true) &amp;&amp; current_hp&gt;350">
+            <Script code="supply_loop_to_hg:=true"/>
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <Nav2Pose name="loop_b_pre_bump"
+                      goal="0.928,-7.01,0.0,0.0,0.0,0.0,0.0"/>
+            <AlignChassis name="align_loop_bump"
+                          target_angle="0.0"
+                          min_angle_diff="8.0"
+                          angular_speed="15.0"/>
+            <Nav2Pose name="loop_b_cross_bump"
+                      goal="4.49,-7.01,0.0,0.0,0.0,0.0,0.0"/>
+            <Nav2Pose name="loop_b_to_hg1"
+                      goal="11.4,-3.72,0.0,0.0,0.0,0.0,0.0"/>
+            <Script code="hg_holding:=true;
+                          return_to_supply:=false;
+                          high_ground_arrived:=true;
+                          hg_patrol_idx:=0;
+                          hg_patrol_arrived:=true"/>
+            <Script code="spin_cmd:=1"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <PostureChange posture_change="1"/>
+            <Sleep msec="15000"/>
+            <Script code="supply_loop_to_hg:=false;
+                          hg_holding:=false;
+                          first_hg1_done:=true;
+                          hg_patrol_idx:=1;
+                          hg_patrol_arrived:=false"/>
+          </Sequence>
+
+          <!-- B-0) 剩余时间进入终局阈值：先回家补给一次（仅一次） -->
+          <Sequence _while="final_supply_done==false">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <Nav2Pose name="final_home_supply"
+                      goal="-1.51,-5.32,0.0,0.0,0.0,0.0,0.0"/>
+            <Script code="final_supply_done:=true"/>
+          </Sequence>
+
+          <!-- B-0b) 已到补给区但血量未达标：持续驻留，直到 current_hp>350 -->
+          <Sequence _while="final_supply_done==true &amp;&amp; align_done_b==false &amp;&amp; current_hp&lt;=350">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <Nav2Pose name="final_home_supply_wait"
+                      goal="-1.51,-5.32,0.0,0.0,0.0,0.0,0.0"/>
+          </Sequence>
+
+          <!-- B-1) 终局首次：血量>350 后才开始颠簸前对准 -->
+          <Sequence _while="final_supply_done==true &amp;&amp; current_hp&gt;350 &amp;&amp; align_done_b==false">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <Nav2Pose name="b_pre_bump_align"
+                      goal="0.928,-7.01,0.0,0.0,0.0,0.0,0.0"/>
+            <AlignChassis name="align_before_bump_b"
+                          target_angle="0.0"
+                          min_angle_diff="8.0"
+                          angular_speed="15.0"/>
+            <Script code="align_done_b:=true"/>
+          </Sequence>
+
+          <!-- B-2) 终局首次：度过颠簸路段 -->
+          <Sequence _while="final_supply_done==true &amp;&amp; align_done_b==true &amp;&amp; bump_crossed_b==false">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <Nav2Pose name="b_cross_bump"
+                      goal="4.49,-7.01,0.0,0.0,0.0,0.0,0.0"/>
+            <Script code="bump_crossed_b:=true"/>
+          </Sequence>
+
+          <!-- B-3) 终局首次上 HG1（仅 first_hg1_done==false；勿用 hg_holding 作 _while，否则优先级高于 B-4 会打断巡逻） -->
+          <Sequence _while="final_supply_done==true &amp;&amp; bump_crossed_b==true &amp;&amp; first_hg1_done==false &amp;&amp; return_to_supply==false &amp;&amp; current_hp&gt;120 &amp;&amp; projectile_allowance&gt;20">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <Nav2Pose name="b_to_hg1"
+                      goal="11.4,-3.72,0.0,0.0,0.0,0.0,0.0"/>
+            <Script code="hg_holding:=true;
+                          high_ground_arrived:=true;
+                          hg_patrol_idx:=0;
+                          hg_patrol_arrived:=true"/>
+            <Script code="spin_cmd:=1"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <PostureChange posture_change="1"/>
+            <Sleep msec="15000"/>
+            <Script code="first_hg1_done:=true;
+                          hg_holding:=false;
+                          hg_patrol_idx:=1;
+                          hg_patrol_arrived:=false"/>
+          </Sequence>
+
+          <!-- B-4b) 在 HG1：前往 HG2；patrol_leg_active 防止 Reactive 在 Nav2/驻守中途丢失本腿 -->
+          <Sequence _while="first_hg1_done==true &amp;&amp; high_ground_arrived==true &amp;&amp; return_to_supply==false &amp;&amp; hg_patrol_idx==1 &amp;&amp; (patrol_leg_active==true || hg_patrol_arrived==false || hg_holding==true) &amp;&amp; current_hp&gt;120 &amp;&amp; projectile_allowance&gt;20">
+            <Script code="patrol_leg_active:=true; spin_cmd:=0"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <PostureChange posture_change="3"/>
+            <Nav2Pose name="patrol_b_to_hg2"
+                      goal="8.45,-4.0,0.0,0.0,0.0,0.0,0.0"/>
+            <Script code="hg_holding:=true; hg_patrol_idx:=1; hg_patrol_arrived:=true"/>
+            <Script code="spin_cmd:=1"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <PostureChange posture_change="1"/>
+            <Sleep msec="15000"/>
+            <Script code="patrol_leg_active:=false;
+                          hg_holding:=false;
+                          hg_patrol_idx:=0;
+                          hg_patrol_arrived:=false"/>
+          </Sequence>
+
+          <!-- B-4d) 在 HG2：前往 HG1 -->
+          <Sequence _while="first_hg1_done==true &amp;&amp; high_ground_arrived==true &amp;&amp; return_to_supply==false &amp;&amp; hg_patrol_idx==0 &amp;&amp; (patrol_leg_active==true || hg_patrol_arrived==false || hg_holding==true) &amp;&amp; current_hp&gt;120 &amp;&amp; projectile_allowance&gt;20">
+            <Script code="patrol_leg_active:=true; spin_cmd:=0"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <PostureChange posture_change="3"/>
+            <Nav2Pose name="patrol_b_to_hg1"
+                      goal="11.4,-3.72,0.0,0.0,0.0,0.0,0.0"/>
+            <Script code="hg_holding:=true; hg_patrol_idx:=0; hg_patrol_arrived:=true"/>
+            <Script code="spin_cmd:=1"/>
+            <SpinOrNot spin_or_not="{spin_cmd}"/>
+            <PostureChange posture_change="1"/>
+            <Sleep msec="15000"/>
+            <Script code="patrol_leg_active:=false;
+                          hg_holding:=false;
+                          hg_patrol_idx:=1;
+                          hg_patrol_arrived:=false"/>
+          </Sequence>
+
+        </ReactiveFallback>
+
+        <!-- ================================================================== -->
+        <!-- 常规阶段：stage_remain_time > 120（前哨进攻 + 提前补给）          -->
+        <!-- ================================================================== -->
+        <!-- 二次保护：非 game_progress==4 时，stage_remain_time 可能是倒计时/无效值，不参与分段 -->
+        <!-- 常规阶段：剩余时间>120，或尚未收到有效 stage（==0） -->
+        <ReactiveFallback _while="game_progress==4 &amp;&amp; (stage_remain_time&gt;120 || stage_remain_time==0)">
+
+          <!-- A-1) 提前补给：弹量不足或低血量 -->
+          <Sequence _while="early_supply==true &amp;&amp; (projectile_allowance&lt;100 || current_hp&lt;120)">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <Nav2Pose name="supply_early"
+                      goal="-1.51,-5.32,0.0,0.0,0.0,0.0,0.0"/>
+          </Sequence>
+
+          <!-- A-2) 提前补给后回前哨进攻位 -->
+          <Sequence _while="early_supply==true &amp;&amp; projectile_allowance&gt;=100 &amp;&amp; current_hp&gt;=120 &amp;&amp; return_outpost_arrived==false">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <Nav2Pose name="return_outpost_attack"
+                      goal="7.26,3.77,0.0,0.0,0.0,0.0,0.0"/>
+            <PostureChange posture_change="1"/>
+            <Script code="return_outpost_arrived:=true"/>
+          </Sequence>
+          <Sequence _while="early_supply==true &amp;&amp; projectile_allowance&gt;=100 &amp;&amp; current_hp&gt;=120 &amp;&amp; return_outpost_arrived==true">
+            <PostureChange posture_change="1"/>
+            <Script code="spin_cmd:=0"/>
+          </Sequence>
+
+          <!-- A-3) 开局默认：前哨进攻位 -->
+          <Sequence _while="early_supply==false &amp;&amp; initial_outpost_arrived==false">
+            <PostureChange posture_change="3"/>
+            <Script code="spin_cmd:=0"/>
+            <Nav2Pose name="initial_outpost_attack"
+                      goal="7.26,3.77,0.0,0.0,0.0,0.0,0.0"/>
+            <PostureChange posture_change="1"/>
+            <Script code="initial_outpost_arrived:=true"/>
+          </Sequence>
+          <Sequence _while="early_supply==false &amp;&amp; initial_outpost_arrived==true">
+            <PostureChange posture_change="1"/>
+            <Script code="spin_cmd:=0"/>
+          </Sequence>
+
+        </ReactiveFallback>
+
+      </ReactiveFallback>
+
+      <SpinOrNot spin_or_not="{spin_cmd}"/>
+    </ReactiveSequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="AlignChassis">
+      <input_port name="target_angle" type="double"/>
+      <input_port name="min_angle_diff" type="double"/>
+      <input_port name="angular_speed" type="double"/>
+    </Action>
+    <Action ID="Nav2Pose">
+      <input_port name="goal"
+                  type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
+    </Action>
+    <Action ID="PostureChange">
+      <input_port name="posture_change" type="int">1 attack, 2 protect, 3 moving</input_port>
+    </Action>
+    <Action ID="SpinOrNot">
+      <input_port name="spin_or_not" type="int">0 or 1.</input_port>
+    </Action>
+    <Action ID="Topics2Blackboard">
+      <output_port name="target_armor_id" type="std::string"/>
+      <output_port name="tracking" type="bool"/>
+      <output_port name="projectile_allowance_17mm" type="unsigned short"/>
+      <output_port name="enemy_outpost_hp" type="unsigned short"/>
+      <output_port name="my_base_hp" type="unsigned short"/>
+      <output_port name="my_outpost_hp" type="unsigned short"/>
+      <output_port name="armor_id" type="unsigned char"/>
+      <output_port name="target_position"
+                   type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
+      <output_port name="enemy_base_hp" type="unsigned short"/>
+      <output_port name="hurt_type" type="unsigned char"/>
+      <output_port name="stage_remain_time" type="unsigned short"/>
+      <output_port name="game_progress" type="unsigned char"/>
+      <output_port name="current_hp" type="unsigned short"/>
+    </Action>
+  </TreeNodesModel>
+
+</root>
