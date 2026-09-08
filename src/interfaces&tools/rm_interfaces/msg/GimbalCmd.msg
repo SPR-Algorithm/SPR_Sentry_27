@@ -8,6 +8,6 @@ uint8 VELOCITY = 3          # velocity control, set velocity
 uint8 yaw_type 1
 uint8 pitch_type 1
 
-# control dada
-Gimbal position
+# control data
+Gimbal position  # 使用包中自己定义的 Gimbal.msg 类型
 Gimbal velocity

@@ -9,7 +9,7 @@ uint8 SPIN = 4             # velocity control, spin at an angular velocity autom
                            # (vx,vy) in gimbal's yaw frame.
 
 # control type
-uint8 type 1
+uint8 type 1  # 默认1
 
 # control data
-geometry_msgs/Twist twist
+geometry_msgs/Twist twist  # ROS2标准速度消息
