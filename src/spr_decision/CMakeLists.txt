@@ -8,7 +8,6 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(auto_aim_interfaces REQUIRED)
 find_package(rm_interfaces REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -33,7 +32,6 @@ include_directories(include)
 
 set(ros_dependencies
   rclcpp
-  auto_aim_interfaces
   rm_interfaces
   nav_msgs
   nav2_msgs
@@ -59,7 +57,6 @@ add_library(${PROJECT_NAME} SHARED
   src/behaviors/spin.cpp
   src/behaviors/topics2blackboard.cpp
   src/behaviors/sentry_cmd.cpp
-  src/behaviors/control_gimbal.cpp
   src/behaviors/align_chassis.cpp
   src/behaviors/spin_or_not.cpp
   src/behaviors/posture_change.cpp
@@ -80,7 +77,6 @@ add_executable(tree_exec_node src/tree_exec_node.cpp
   src/behaviors/spin.cpp
   src/behaviors/topics2blackboard.cpp
   src/behaviors/sentry_cmd.cpp
-  src/behaviors/control_gimbal.cpp
   src/behaviors/align_chassis.cpp
   src/behaviors/spin_or_not.cpp
   src/behaviors/posture_change.cpp

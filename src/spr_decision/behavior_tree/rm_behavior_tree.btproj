@@ -18,7 +18,6 @@
     <include path="patrol.xml"/>
     <include path="test_align_chassiss.xml"/>
     <include path="test_antiautoaim.xml"/>
-    <include path="test_control_gimbal.xml"/>
     <include path="test_nav.xml"/>
     <include path="test_nav_att.xml"/>
     <!-- Description of Node Models (used by Groot) -->
@@ -35,9 +34,6 @@
         <Action ID="Attack">
             <output_port name="attack_pose" type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
             <input_port name="target_position" type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;"/>
-        </Action>
-        <Action ID="ControlGimbal">
-            <input_port name="goal" type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
         </Action>
         <Action ID="Nav2Pose">
             <input_port name="goal" type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>

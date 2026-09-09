@@ -4,7 +4,6 @@
 #include "spr_decision/behaviors/topics2blackboard.hpp"
 #include "spr_decision/behaviors/anti_autoaim.hpp"
 #include "spr_decision/behaviors/sentry_cmd.hpp"
-#include "spr_decision/behaviors/control_gimbal.hpp"
 #include "spr_decision/behaviors/align_chassis.hpp"
 #include "spr_decision/behaviors/spin_or_not.hpp"
 #include "spr_decision/behaviors/posture_change.hpp"
@@ -75,7 +74,6 @@ int main(int argc, char **argv)
   factory.registerNodeType<spr_decision::Spin>("Spin",node);
   factory.registerNodeType<spr_decision::Attack>("Attack",node,tf_buffer,tf_listener);
   factory.registerNodeType<spr_decision::Topics2Blackboard>("Topics2Blackboard",node,tf_buffer,tf_listener);
-  factory.registerNodeType<spr_decision::ControlGimbal>("ControlGimbal",node,tf_buffer,tf_listener);
   factory.registerNodeType<spr_decision::SentryCmd>("SentryCmd",node);
   factory.registerNodeType<spr_decision::AlignChassis>("AlignChassis",node,tf_buffer,tf_listener);
   factory.registerNodeType<spr_decision::SpinOrNot>("SpinOrNot",node);

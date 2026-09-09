@@ -25,7 +25,6 @@
 #include <std_msgs/msg/int16.hpp>
 
 #include "rm_interfaces/msg/target.hpp"
-// #include "auto_aim_interfaces/msg/target.hpp"
 #include "rm_interfaces/msg/game_state.hpp"
 
 #include "spr_decision/custume_types.hpp"

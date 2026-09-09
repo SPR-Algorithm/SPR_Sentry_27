@@ -9,7 +9,6 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
-#include "auto_aim_interfaces/msg/target.hpp"
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <rclcpp/qos.hpp>
 
@@ -65,7 +64,6 @@ namespace spr_decision
     double obs_intensity_threshold_;
     std::string global_frame_, base_frame_;
     std::string obs_pcl_topic_,target_topic_;
-    auto_aim_interfaces::msg::Target target_info_;
     geometry_msgs::msg::Pose target_point_;
     pcl::PointCloud<pcl::PointXYZI>::Ptr obs_pcl_;
     pcl::PointCloud<pcl::PointXYZI>::Ptr surrouding_obs_;

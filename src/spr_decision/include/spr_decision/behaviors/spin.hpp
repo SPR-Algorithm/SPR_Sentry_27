@@ -5,7 +5,6 @@
 // #include <geometry_msgs/msg/point_stamped.hpp>
 #include <std_msgs/msg/int8.hpp>
 #include <std_msgs/msg/float32.hpp>
-#include "auto_aim_interfaces/msg/target.hpp"
 #include <rclcpp/qos.hpp>
 #include <optional>
 
