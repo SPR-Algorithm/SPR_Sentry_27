@@ -26,10 +26,14 @@
 #define LIVOX_ROS_DRIVER2_LDDC_H_
 
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <string>
 
 #include "comm/comm.h"
 #include "driver_node.h"
 #include "lds.h"
+#include "rosbag2_cpp/writer.hpp"
 
 namespace livox_ros
 {
@@ -68,13 +72,14 @@ class Lddc final
 {
 public:
   Lddc(
-    int format, int multi_topic, int data_src, int output_type, double frq, std::string & frame_id);
+    int format, int multi_topic, int data_src, int output_type, double frq, std::string & frame_id,
+    bool enable_lidar_bag, bool enable_imu_bag);
   ~Lddc();
 
   int RegisterLds(Lds * lds);
   void DistributePointCloudData(void);
   void DistributeImuData(void);
-  void CreateBagFile(const std::string & file_name);
+  bool CreateBagFile(const std::string & file_name);
   void PrepareExit(void);
 
   uint8_t GetTransferFormat(void) { return transfer_format_; }
@@ -111,6 +116,12 @@ private:
   void PublishPclData(const uint8_t index, const uint64_t timestamp, const PointCloud & cloud);
 
   void InitImuMsg(const ImuData & imu_data, ImuMsg & imu_msg, uint64_t & timestamp);
+  void CloseBagFile();
+  void WritePointCloud2ToBag(
+    const PointCloud2 & cloud, const std::string & topic_name, uint64_t timestamp);
+  void WriteCustomMsgToBag(
+    const CustomMsg & livox_msg, const std::string & topic_name, uint64_t timestamp);
+  void WriteImuToBag(const ImuMsg & imu_msg, const std::string & topic_name, uint64_t timestamp);
 
   void FillPointsToPclMsg(PointCloud & pcl_msg, LivoxPointXyzrtlt * src_point, uint32_t num);
   void FillPointsToCustomMsg(
@@ -131,6 +142,11 @@ private:
   double publish_frq_;
   uint32_t publish_period_ns_;
   std::string frame_id_;
+  bool enable_lidar_bag_;
+  bool enable_imu_bag_;
+  std::string bag_path_;
+  std::unique_ptr<rosbag2_cpp::Writer> bag_writer_;
+  std::mutex bag_mutex_;
 
   PublisherPtr private_pub_[kMaxSourceLidar];
   PublisherPtr global_pub_;

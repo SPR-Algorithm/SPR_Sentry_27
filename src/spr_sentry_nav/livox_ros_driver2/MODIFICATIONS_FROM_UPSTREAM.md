@@ -131,13 +131,21 @@ ROS2 启动文件创建 `livox_ros_driver2_node` 后，原驱动按以下顺序�
 | `multi_topic` | `0` | 所有雷达共用话题，或每台雷达独立话题 |
 | `data_src` | `0` | 数据来源；`0` 表示实时雷达 |
 | `publish_freq` | `10.0` | 点云分帧和发布频率，范围被限制为 `0.5~100 Hz` |
-| `output_data_type` | `0` | 输出到 ROS 或其他输出方式；ROS2 主要使用 `0` |
+| `output_data_type` | `0` | `0` 发布 ROS 话题；官方的 `1` 仅在 ROS1 分支写 rosbag |
 | `frame_id` | `frame_default` | 写入点云消息头的坐标系名称 |
 | `user_config_path` | `path_default` | Livox JSON 配置文件路径 |
 | `cmdline_input_bd_code` | `000000000000001` | 旧设备发现/广播码相关兼容参数 |
 | `lvx_file_path` | `/home/livox/livox_test.lvx` | LVX 文件数据源相关参数；当前实时 MID360 路径不使用 |
 
-其中最影响输出行为的是 `xfer_format`、`multi_topic`、`publish_freq`、`frame_id` 和 `user_config_path`。
+当前 fork 已为 ROS2 重新实现 `output_data_type=1`，并新增：
+
+| 参数 | 默认值 | 含义 |
+| --- | --- | --- |
+| `rosbag_path` | `livox_rosbag2` | rosbag2 输出目录，启动前必须不存在 |
+| `enable_lidar_bag` | `true` | bag 模式下是否写入当前点云格式 |
+| `enable_imu_bag` | `true` | bag 模式下是否写入 Livox IMU |
+
+其中最影响实时发布行为的是 `xfer_format`、`multi_topic`、`publish_freq`、`frame_id` 和 `user_config_path`；录包模式还必须检查上述四个 bag 参数。
 
 ### 3.5 原驱动 JSON 配置结构
 
@@ -505,6 +513,7 @@ linear_acceleration
 | IMU 外参旋转 | `src/comm/pub_handler.cpp` | 将 IMU 数据旋转到安装后的坐标方向 | 代码存在；当前 JSON 外参为零，实际等价于不旋转 |
 | 内置预编译 Livox-SDK2 | `Livox-SDK2/`、`CMakeLists.txt` | 无需单独安装 SDK，便于整仓构建和部署 | 是 |
 | ROS2 专用化 | `CMakeLists.txt` 和多处源码 | 去除 ROS1/catkin 分支，简化 Humble 构建 | 是 |
+| ROS2 bag2 写入 | `src/lddc.cpp`、`src/lds.cpp` | 用 `rosbag2_cpp` 录制点云和 IMU，并在退出时完整关闭 | 按需使用 |
 | 分帧性能优化 | `src/comm/pub_handler.cpp` | 去掉每包固定休眠，降低处理延迟 | 是 |
 
 ---
@@ -803,17 +812,40 @@ add_definitions(-DBUILDING_ROS2)
 
 实际作用：
 
-- 减少与 catkin、ROS1 消息和 rosbag 的编译冲突；
+- 减少与 catkin 和 ROS1 消息的编译冲突；
 - 目录结构更适合直接放进当前 colcon 工作区；
 - 降低整仓构建的依赖数量。
 
-代价：
+该 fork 不能再直接作为 ROS1 驱动使用，但原 ROS1 `rosbag::Bag` 路径已经改为 ROS2 `rosbag2_cpp::Writer`：
 
-- 该 fork 不能再直接作为 ROS1 驱动使用；
-- `CreateBagFile()` 当前为空实现；
-- `output_data_type` 选择 rosbag 输出时不会真正写包，不应依赖驱动内部录包功能。
+- `CreateBagFile()` 打开标准 bag2 目录；
+- PointCloud2、Livox CustomMsg 和 IMU 使用 CDR 序列化写入；
+- 点云线程和 IMU 线程共用 writer，并通过互斥锁串行写入；
+- 节点退出时调用 `Writer::close()` 生成 `metadata.yaml`；
+- `Lds::RequestExit()` 会唤醒两个阻塞的轮询线程，保证无数据或雷达掉线时也能完成关闭；
+- 使用默认 `sqlite3` 存储插件，产物可由 `ros2 bag info/play` 读取。
 
-当前工程应使用 ROS2 自带的 `ros2 bag record` 录制话题。
+驱动内部 bag-only 配置为：
+
+```yaml
+livox_ros_driver2:
+  ros__parameters:
+    output_data_type: 1
+    rosbag_path: "livox_rosbag2"
+    enable_lidar_bag: true
+    enable_imu_bag: true
+```
+
+`rosbag_path` 是目录而不是 ROS1 的单个 `.bag` 文件，并且目录在启动前不能存在。录制时的点云类型仍由 `xfer_format` 决定：`0` 写 PointCloud2，`1` 写 CustomMsg，`4` 在单话题模式下写两种点云。
+
+`output_data_type=1` 维持原来的目的地二选一语义：消息写入 bag，但不发布 DDS 话题。如果需要导航正常运行的同时录制多节点数据，应保持 `output_data_type=0`，改用独立命令：
+
+```bash
+ros2 bag record /red_standard_robot1/livox/lidar_merged \
+  /red_standard_robot1/livox/imu_192_168_1_194
+```
+
+停止时应使用 `Ctrl+C`/SIGINT，避免强制杀进程导致 metadata 来不及落盘。
 
 ### 10.2 内置预编译 Livox-SDK2
 
@@ -995,11 +1027,11 @@ ament_auto_package()
 
 建议：记录 SDK2 的上游 commit/tag、编译系统、架构和校验和；升级时成套更新头文件及共享库。
 
-### 15.6 驱动内部 rosbag 功能已不可用
+### 15.6 ROS2 bag 的使用边界
 
-现状：ROS1 bag 相关代码被删除，`CreateBagFile()` 是空函数。
+现状：驱动内部已经可以用 `rosbag2_cpp` 录制点云和 IMU，但 `output_data_type=1` 时不会同时发布 DDS 话题。
 
-建议：统一使用工程中的 ROS2 录包脚本或 `ros2 bag record`，不要设置 `output_data_type=1` 期待驱动自行录包。
+维护要求：只采集 Livox 原始数据时可用内部 bag 模式；导航联调或需要同时记录里程计、TF、地形图等多节点话题时，保持 `output_data_type=0` 并使用外部 `ros2 bag record`。每次使用新的 `rosbag_path`，并用 SIGINT 正常结束录制。
 
 ---
 
@@ -1075,6 +1107,28 @@ ros2 topic echo /livox/lidar_merged --once
 - 连续消息的 `header.stamp` 是否递增；
 - 控制台是否出现 invalid offset、over max 或尚未发布融合消息的警告。
 
+### 16.6 检查 ROS2 bag
+
+内部录包正常退出后执行：
+
+```bash
+ros2 bag info <rosbag_path>
+```
+
+应看到 `Storage id: sqlite3`、实际记录的话题类型和非零消息数。目录中至少应存在数据库文件和：
+
+```text
+metadata.yaml
+```
+
+随后可用以下命令验证反序列化和回放：
+
+```bash
+ros2 bag play <rosbag_path>
+```
+
+若缺少 `metadata.yaml`，先确认进程是否被 `SIGKILL` 强制终止；正常使用 `Ctrl+C` 后驱动应打印“ROS2 bag saved successfully”。
+
 ---
 
 ## 17. 关键文件索引
@@ -1083,7 +1137,8 @@ ros2 topic echo /livox/lidar_merged --once
 | --- | --- |
 | `README.md` | 战队 fork 的简要修改说明 |
 | `src/lddc.h` | 新增 `kAllMsg=4`、第二 publisher 接口 |
-| `src/lddc.cpp` | 双格式构造与发布、多话题 publisher 逻辑 |
+| `src/lddc.cpp` | 双格式构造与发布、多话题 publisher、rosbag2 写入逻辑 |
+| `src/lds.cpp` | 数据队列管理，退出时唤醒点云与 IMU 线程 |
 | `src/comm/pub_handler.cpp` | 点云分帧、IMU 外参旋转、数据包处理 |
 | `CMakeLists.txt` | ROS2 专用构建、内置 SDK 链接，不再安装示例目录 |
 | `Livox-SDK2/` | 内置 SDK2 头文件及预编译动态库 |
@@ -1103,6 +1158,7 @@ ros2 topic echo /livox/lidar_merged --once
 4. 增加 IMU 安装角旋转能力；
 5. 针对双 MID360 实车设置固定网络地址、多话题和 20 Hz 发布；
 6. 通过独立融合节点完成双雷达外参变换、时间统一和时间戳保护，再将融合 CustomMsg 提供给 Point-LIO。
+7. 将失效的 ROS1 rosbag 路径改为 ROS2 bag2，可直接用 `ros2 bag info/play` 检查和回放。
 
 当前真正的导航主链路是：
 

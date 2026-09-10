@@ -29,7 +29,9 @@
 #include <stdint.h>
 
 #include <cstdint>
+#include <exception>
 #include <iostream>
+#include <utility>
 
 #include "comm/comm.h"
 #include "comm/ldq.h"
@@ -40,13 +42,16 @@ namespace livox_ros
 
 /** Lidar Data Distribute Control--------------------------------------------*/
 Lddc::Lddc(
-  int format, int multi_topic, int data_src, int output_type, double frq, std::string & frame_id)
+  int format, int multi_topic, int data_src, int output_type, double frq, std::string & frame_id,
+  bool enable_lidar_bag, bool enable_imu_bag)
 : transfer_format_(format),
   use_multi_topic_(multi_topic),
   data_src_(data_src),
   output_type_(output_type),
   publish_frq_(frq),
-  frame_id_(frame_id)
+  frame_id_(frame_id),
+  enable_lidar_bag_(enable_lidar_bag),
+  enable_imu_bag_(enable_imu_bag)
 {
   publish_period_ns_ = kNsPerSecond / publish_frq_;
   lds_ = nullptr;
@@ -145,6 +150,8 @@ void Lddc::PollingLidarImuData(uint8_t index, LidarDevice * lidar)
 
 void Lddc::PrepareExit()
 {
+  CloseBagFile();
+
   if (lds_) {
     lds_->PrepareExit();
     lds_ = nullptr;
@@ -318,7 +325,8 @@ void Lddc::PublishPointcloud2Data(
   }
   if (kOutputToRos == output_type_) {
     publisher_ptr->publish(cloud);
-  } else {
+  } else if (kOutputToRosBagFile == output_type_ && enable_lidar_bag_) {
+    WritePointCloud2ToBag(cloud, publisher_ptr->get_topic_name(), timestamp);
   }
 }
 
@@ -368,7 +376,8 @@ void Lddc::PublishCustomPointData(const CustomMsg & livox_msg, const uint8_t ind
 
   if (kOutputToRos == output_type_) {
     publisher_ptr->publish(livox_msg);
-  } else {
+  } else if (kOutputToRosBagFile == output_type_ && enable_lidar_bag_) {
+    WriteCustomMsgToBag(livox_msg, publisher_ptr->get_topic_name(), livox_msg.timebase);
   }
 }
 
@@ -425,7 +434,8 @@ void Lddc::PublishImuData(LidarImuDataQueue & imu_data_queue, const uint8_t inde
 
   if (kOutputToRos == output_type_) {
     publisher_ptr->publish(imu_msg);
-  } else {
+  } else if (kOutputToRosBagFile == output_type_ && enable_imu_bag_) {
+    WriteImuToBag(imu_msg, publisher_ptr->get_topic_name(), timestamp);
   }
 }
 
@@ -538,6 +548,95 @@ std::shared_ptr<rclcpp::PublisherBase> Lddc::GetCurrentImuPublisher(uint8_t hand
   }
 }
 
-void Lddc::CreateBagFile(const std::string & file_name) {}
+bool Lddc::CreateBagFile(const std::string & file_name)
+{
+  if (file_name.empty()) {
+    DRIVER_ERROR(*cur_node_, "ROS2 bag path must not be empty.");
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(bag_mutex_);
+  if (bag_writer_) {
+    DRIVER_ERROR(*cur_node_, "ROS2 bag is already open: %s", bag_path_.c_str());
+    return false;
+  }
+
+  try {
+    auto writer = std::make_unique<rosbag2_cpp::Writer>();
+    writer->open(file_name);
+    bag_path_ = file_name;
+    bag_writer_ = std::move(writer);
+    DRIVER_INFO(*cur_node_, "ROS2 bag recording started: %s", bag_path_.c_str());
+    return true;
+  } catch (const std::exception & exception) {
+    DRIVER_ERROR(
+      *cur_node_, "Failed to create ROS2 bag at %s: %s", file_name.c_str(), exception.what());
+    return false;
+  }
+}
+
+void Lddc::CloseBagFile()
+{
+  std::lock_guard<std::mutex> lock(bag_mutex_);
+  if (!bag_writer_) {
+    return;
+  }
+
+  try {
+    DRIVER_INFO(*cur_node_, "Closing ROS2 bag: %s", bag_path_.c_str());
+    bag_writer_->close();
+    bag_writer_.reset();
+    DRIVER_INFO(*cur_node_, "ROS2 bag saved successfully: %s", bag_path_.c_str());
+  } catch (const std::exception & exception) {
+    DRIVER_ERROR(
+      *cur_node_, "Failed to close ROS2 bag at %s: %s", bag_path_.c_str(), exception.what());
+    bag_writer_.reset();
+  }
+}
+
+void Lddc::WritePointCloud2ToBag(
+  const PointCloud2 & cloud, const std::string & topic_name, uint64_t timestamp)
+{
+  std::lock_guard<std::mutex> lock(bag_mutex_);
+  if (!bag_writer_) {
+    return;
+  }
+
+  try {
+    bag_writer_->write(cloud, topic_name, rclcpp::Time(timestamp));
+  } catch (const std::exception & exception) {
+    DRIVER_ERROR(*cur_node_, "Failed to write PointCloud2 to ROS2 bag: %s", exception.what());
+  }
+}
+
+void Lddc::WriteCustomMsgToBag(
+  const CustomMsg & livox_msg, const std::string & topic_name, uint64_t timestamp)
+{
+  std::lock_guard<std::mutex> lock(bag_mutex_);
+  if (!bag_writer_) {
+    return;
+  }
+
+  try {
+    bag_writer_->write(livox_msg, topic_name, rclcpp::Time(timestamp));
+  } catch (const std::exception & exception) {
+    DRIVER_ERROR(*cur_node_, "Failed to write CustomMsg to ROS2 bag: %s", exception.what());
+  }
+}
+
+void Lddc::WriteImuToBag(
+  const ImuMsg & imu_msg, const std::string & topic_name, uint64_t timestamp)
+{
+  std::lock_guard<std::mutex> lock(bag_mutex_);
+  if (!bag_writer_) {
+    return;
+  }
+
+  try {
+    bag_writer_->write(imu_msg, topic_name, rclcpp::Time(timestamp));
+  } catch (const std::exception & exception) {
+    DRIVER_ERROR(*cur_node_, "Failed to write Imu to ROS2 bag: %s", exception.what());
+  }
+}
 
 }  // namespace livox_ros

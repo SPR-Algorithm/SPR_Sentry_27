@@ -27,6 +27,7 @@
 #include <chrono>
 #include <csignal>
 #include <iostream>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -51,13 +52,19 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   int data_src = kSourceRawLidar;
   double publish_freq = 10.0; /* Hz */
   int output_type = kOutputToRos;
+  bool enable_lidar_bag = true;
+  bool enable_imu_bag = true;
   std::string frame_id;
+  std::string rosbag_path;
 
   this->declare_parameter("xfer_format", xfer_format);
   this->declare_parameter("multi_topic", 0);
   this->declare_parameter("data_src", data_src);
   this->declare_parameter("publish_freq", 10.0);
   this->declare_parameter("output_data_type", output_type);
+  this->declare_parameter("rosbag_path", "livox_rosbag2");
+  this->declare_parameter("enable_lidar_bag", enable_lidar_bag);
+  this->declare_parameter("enable_imu_bag", enable_imu_bag);
   this->declare_parameter("frame_id", "frame_default");
   this->declare_parameter("user_config_path", "path_default");
   this->declare_parameter("cmdline_input_bd_code", "000000000000001");
@@ -68,16 +75,33 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   this->get_parameter("data_src", data_src);
   this->get_parameter("publish_freq", publish_freq);
   this->get_parameter("output_data_type", output_type);
+  this->get_parameter("rosbag_path", rosbag_path);
+  this->get_parameter("enable_lidar_bag", enable_lidar_bag);
+  this->get_parameter("enable_imu_bag", enable_imu_bag);
   this->get_parameter("frame_id", frame_id);
+
+  if (output_type != kOutputToRos && output_type != kOutputToRosBagFile) {
+    throw std::invalid_argument(
+      "output_data_type must be 0 (publish to ROS) or 1 (write a ROS2 bag)");
+  }
+  if (output_type == kOutputToRosBagFile && !enable_lidar_bag && !enable_imu_bag) {
+    throw std::invalid_argument(
+      "enable_lidar_bag and enable_imu_bag cannot both be false when recording a ROS2 bag");
+  }
 
   publish_freq = std::clamp(publish_freq, 0.5, 100.0);
 
   future_ = exit_signal_.get_future();
 
   /** Lidar data distribute control and lidar data source set */
-  lddc_ptr_ =
-    std::make_unique<Lddc>(xfer_format, multi_topic, data_src, output_type, publish_freq, frame_id);
+  lddc_ptr_ = std::make_unique<Lddc>(
+    xfer_format, multi_topic, data_src, output_type, publish_freq, frame_id, enable_lidar_bag,
+    enable_imu_bag);
   lddc_ptr_->SetRosNode(this);
+
+  if (output_type == kOutputToRosBagFile && !lddc_ptr_->CreateBagFile(rosbag_path)) {
+    throw std::runtime_error("Failed to initialize ROS2 bag writer");
+  }
 
   if (data_src == kSourceRawLidar) {
     DRIVER_INFO(*this, "Data Source is raw lidar.");

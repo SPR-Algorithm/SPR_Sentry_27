@@ -6,6 +6,9 @@ livox_ros_driver2:
     data_src: 0                                         # 0-lidar, others-Invalid data src
     publish_freq: 20.0                     # frequency of publish, 5.0, 10.0, 20.0, 50.0, etc.
     output_data_type: 0
+    rosbag_path: "livox_rosbag2"                       # output_data_type=1 时创建的 ROS2 bag 目录；目录必须尚不存在
+    enable_lidar_bag: True                            # output_data_type=1 时记录当前 xfer_format 对应的点云
+    enable_imu_bag: True                              # output_data_type=1 时记录 Livox IMU
     frame_id: front_mid360
     user_config_path: $(find-pkg-share spr_nav_bringup)/config/reality/mid360_user_config.json
     cmdline_input_bd_code: livox0000000001
@@ -660,4 +663,3 @@ velocity_smoother:
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]      # 与 MPPI 一致：到点后允许输出真实零速，避免死区把 0.05~0.1 抬成持续微动
     velocity_timeout: 0.2
-
