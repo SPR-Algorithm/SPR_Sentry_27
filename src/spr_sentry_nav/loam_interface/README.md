@@ -238,10 +238,9 @@ ros2 run loam_interface loam_interface_node --ros-args \
 
 ```text
 spr_nav_bringup/config/reality/nav2_params.yaml
-spr_nav_bringup/config/simulation/nav2_params.yaml
 ```
 
-当前两份配置均使用：
+当前配置使用：
 
 ```yaml
 loam_interface:

@@ -243,21 +243,21 @@ intensity = vehicleHeight
 
 ### 4.1 当前工程配置
 
-`spr_nav_bringup` 不使用包内 XML launch 的参数，而是通过统一的 `nav2_params.yaml` 启动节点。当前关键差异如下：
+`spr_nav_bringup` 不使用包内 XML launch 的参数，而是通过统一的 `nav2_params.yaml` 启动节点。实车配置中的关键参数如下：
 
-| 参数 | simulation | reality |
-| --- | ---: | ---: |
-| `scanVoxelSize` | `0.05` | `0.08` |
-| `decayTime` | `0.5` | `0.5` |
-| `noDecayDis` | `0.0` | `0.0` |
-| `useSorting` | `true` | `true` |
-| `quantileZ` | `0.2` | `0.28` |
-| `limitGroundLift` | `false` | `true` |
-| `maxGroundLift` | `0.3` | `0.25` |
-| `minBlockPointNum` | `10` | `35` |
-| `vehicleHeight` | `0.5` | `0.35` |
-| `voxelTimeUpdateThre` | `1.0` | `1.0` |
-| `maxRelZ` | `0.5` | `0.25` |
+| 参数 | reality |
+| --- | ---: |
+| `scanVoxelSize` | `0.08` |
+| `decayTime` | `0.5` |
+| `noDecayDis` | `0.0` |
+| `useSorting` | `true` |
+| `quantileZ` | `0.28` |
+| `limitGroundLift` | `true` |
+| `maxGroundLift` | `0.25` |
+| `minBlockPointNum` | `35` |
+| `vehicleHeight` | `0.35` |
+| `voxelTimeUpdateThre` | `1.0` |
+| `maxRelZ` | `0.25` |
 | `disRatioZ` | `0.2` | `0.15` |
 
 实车配置更强调抑制稀疏地面环和远距离噪声，因此使用更高的地面分位、更高的最少样本数、更窄的 Z 窗口和更低的输出高度上限。
@@ -338,7 +338,6 @@ ros2 run terrain_analysis terrainAnalysis --ros-args \
 当前工程由 `spr_nav_bringup/launch/navigation_launch.py` 启动该节点，节点名被设置为 `terrain_analysis`，参数来自：
 
 ```text
-src/spr_sentry_nav/spr_nav_bringup/config/simulation/nav2_params.yaml
 src/spr_sentry_nav/spr_nav_bringup/config/reality/nav2_params.yaml
 ```
 

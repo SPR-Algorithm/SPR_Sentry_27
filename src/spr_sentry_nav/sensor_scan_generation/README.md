@@ -301,13 +301,7 @@ ros2 run sensor_scan_generation sensor_scan_generation_node --ros-args \
 spr_nav_bringup/config/reality/nav2_params.yaml
 ```
 
-仿真配置位于：
-
-```text
-spr_nav_bringup/config/simulation/nav2_params.yaml
-```
-
-两者当前均配置为：
+当前配置为：
 
 ```yaml
 sensor_scan_generation:
@@ -316,8 +310,6 @@ sensor_scan_generation:
     base_frame: base_footprint
     robot_base_frame: gimbal_yaw
 ```
-
-仿真环境还应保证 `use_sim_time: True`，所有输入节点和 TF 发布节点使用同一个 `/clock`。
 
 ## 6. 启动时序
 
@@ -512,7 +504,7 @@ ros2 topic info -v /red_standard_robot1/tf
 - 包内 launch 默认是 `chassis`；
 - 当前整车参数是 `base_footprint`。
 
-还应确认整车加载的是 reality 还是 simulation 参数文件、`use_sim_time` 是否正确，以及节点实际参数是否被同名 YAML 节覆盖。
+还应确认整车加载的是 reality 参数文件，以及节点实际参数是否被同名 YAML 节覆盖。
 
 ## 9. 已知限制与实现注意事项
 
