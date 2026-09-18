@@ -39,11 +39,6 @@ namespace spr_decision
   NodeStatus Topics2Blackboard::tick()
   {
     check_subscriber_();
-    // if(target_.tracking == false && node_->now().seconds() - target_->header.stamp.sec > tracking_timeout_s_)
-    // {
-    //   setOutput<bool>("tracking", false);
-    //   setOutput<std::string>("target_armor_id", "None");
-    // }
     return NodeStatus::SUCCESS;
   }
 
@@ -62,7 +57,6 @@ namespace spr_decision
         OutputPort<std::uint16_t>("enemy_base_hp"),
         OutputPort<std::uint16_t>("projectile_allowance_17mm"),
         OutputPort<bool>("tracking"),
-        OutputPort<std::string>("target_armor_id"),
         OutputPort<geometry_msgs::msg::PoseStamped>("target_position"),
     };
   }
@@ -86,7 +80,6 @@ namespace spr_decision
   void Topics2Blackboard::target_callback_(const rm_interfaces::msg::Target::SharedPtr msg)
   {
     target_ = *msg;
-    target_armor_id_ = target_->id;
     setOutput<bool>("tracking", target_->tracking);
     // if tracking, calculate target pose at map directly
     if (target_->tracking)
@@ -103,26 +96,22 @@ namespace spr_decision
             rclcpp::get_logger("Topics2Blackboard"), "Could not transform %s to %s: %s",
             to_frame_.c_str(), target_->header.frame_id.c_str(), ex.what());
         setOutput<bool>("tracking", false);
-        setOutput<std::string>("target_armor_id", "None");
         return;
       }
       target_pose_.header.frame_id = to_frame_;
       target_pose_.header.stamp = node_->now();
       setOutput<geometry_msgs::msg::PoseStamped>("target_position", target_pose_);
-      setOutput<std::string>("target_armor_id", target_armor_id_);
       last_tracking_time_ = node_->now();
     }else{
       // check if tracking timeout
       if(node_->now().seconds() - last_tracking_time_.seconds() > tracking_timeout_s_)
       {
         setOutput<bool>("tracking", false);
-        setOutput<std::string>("target_armor_id", "None");
       }
       else
       {
         setOutput<bool>("tracking", true);
         setOutput<geometry_msgs::msg::PoseStamped>("target_position", target_pose_);
-        setOutput<std::string>("target_armor_id", target_armor_id_);
       }
     }
 
@@ -150,12 +139,10 @@ namespace spr_decision
     {
       RCLCPP_WARN(rclcpp::get_logger("Topics2Blackboard"), "target is null");
       setOutput<bool>("tracking", false);
-      setOutput<std::string>("target_armor_id", "None");
     }
     if (!subscribe_target_)
     {
       setOutput<bool>("tracking", false);
-      setOutput<std::string>("target_armor_id", "None");
     }
   }
 } // end namespace spr_decision

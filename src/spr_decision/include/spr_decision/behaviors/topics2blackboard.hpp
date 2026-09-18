@@ -63,15 +63,12 @@ namespace spr_decision
     /// false 时不订阅自瞄，不刷 target is null
     bool subscribe_target_{true};
 
-    geometry_msgs::msg::Point target_r_map_;
     geometry_msgs::msg::PoseStamped target_pose_;
-    std::string target_armor_id_;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     geometry_msgs::msg::TransformStamped t;
     std::string to_frame_;
-    std::string team_;
     double tracking_timeout_s_;
     rclcpp::Time last_tracking_time_;
   };

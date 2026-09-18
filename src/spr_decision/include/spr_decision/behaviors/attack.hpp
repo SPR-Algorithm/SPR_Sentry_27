@@ -57,13 +57,13 @@ namespace spr_decision
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;    
     
-    bool target_tracking_,obs_pcl_received_,vehicle_pose_received_;
+    bool obs_pcl_received_,vehicle_pose_received_;
     double distance_to_target_,vehicle_dim_;
     double vehicle_X_,vehicle_Y_;
     int pose_candidate_num,min_obs_num_;
     double obs_intensity_threshold_;
     std::string global_frame_, base_frame_;
-    std::string obs_pcl_topic_,target_topic_;
+    std::string obs_pcl_topic_;
     geometry_msgs::msg::Pose target_point_;
     pcl::PointCloud<pcl::PointXYZI>::Ptr obs_pcl_;
     pcl::PointCloud<pcl::PointXYZI>::Ptr surrouding_obs_;

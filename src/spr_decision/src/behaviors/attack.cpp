@@ -8,7 +8,7 @@ namespace spr_decision
 {
   Attack::Attack(const std::string &name, const NodeConfig &config, std::shared_ptr<rclcpp::Node> node, std::shared_ptr<tf2_ros::Buffer> tf_buffer, std::shared_ptr<tf2_ros::TransformListener> tf_listener)
       : SyncActionNode(name, config), node_(node), tf_buffer_(tf_buffer), tf_listener_(tf_listener),
-        target_tracking_(false), obs_pcl_received_(false), vehicle_pose_received_(false)
+        obs_pcl_received_(false), vehicle_pose_received_(false)
   {
     node_->get_parameter_or<double>("attack_distance", distance_to_target_, 3.0);
     node_->get_parameter_or<double>("vehicle_dim", vehicle_dim_, 1.0);
@@ -457,4 +457,3 @@ namespace spr_decision
     };
   }
 } // end namespace spr_decision
-

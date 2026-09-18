@@ -16,7 +16,6 @@ import tf_transformations
 from tf2_ros import TransformException, Buffer, TransformListener, TransformBroadcaster
 import struct
 from rm_interfaces.msg import GameState
-from rm_interfaces.msg import Target
 from sensor_msgs.msg import JointState
 from math import cos, sin
 import math
@@ -405,6 +404,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
 
 

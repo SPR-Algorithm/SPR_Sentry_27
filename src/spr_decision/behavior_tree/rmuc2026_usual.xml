@@ -2,8 +2,7 @@
 <root BTCPP_format="4">
   <BehaviorTree ID="rmuc2026_usual">
     <ReactiveSequence>
-      <Topics2Blackboard target_armor_id="{target_armor_id}"
-                         tracking="{tracking}"
+      <Topics2Blackboard tracking="{tracking}"
                          projectile_allowance_17mm="{projectile_sllowance}"
                          enemy_outpost_hp="{enemy_outpost_hp}"
                          my_base_hp="{my_base_hp}"
@@ -59,8 +58,6 @@
                   type="geometry_msgs::msg::PoseStamped_&lt;std::allocator&lt;void&gt; &gt;">goal send to navigator.</input_port>
     </Action>
     <Action ID="Topics2Blackboard">
-      <output_port name="target_armor_id"
-                   type="std::string"/>
       <output_port name="tracking"
                    type="bool"/>
       <output_port name="projectile_allowance_17mm"

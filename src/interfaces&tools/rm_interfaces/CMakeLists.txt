@@ -29,9 +29,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/referee/SentryCmd.msg"
   # "msg/referee/ShootData.msg"
   "msg/ChassisCmd.msg"
-  "msg/Gimbal.msg"
-  "msg/GimbalCmd.msg"
-  "msg/ShootCmd.msg"
   "msg/Target.msg"
 
 DEPENDENCIES  # 可能使用其他ros2包定义的消息，生成代码时一并处理
