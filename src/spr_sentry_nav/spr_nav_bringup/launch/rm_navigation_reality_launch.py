@@ -62,10 +62,7 @@ def generate_launch_description():
     declare_world_cmd = DeclareLaunchArgument(
         "world",
         default_value="map_0514",
-        description=(
-            "Basename for map/reality/<world>.yaml and pcd/reality/<world>.pcd "
-            "(仓库内无 rmul_2024 资源时勿保留旧默认，否则会 map_server / GICP 启动失败)"
-        ),
+        description="Basename for map/reality/<world>.yaml and pcd/reality/<world>.pcd",
     )
 
     declare_map_yaml_cmd = DeclareLaunchArgument(

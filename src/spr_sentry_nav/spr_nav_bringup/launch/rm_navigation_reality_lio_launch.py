@@ -49,8 +49,8 @@ def generate_launch_description():
 
     declare_world_cmd = DeclareLaunchArgument(
         "world",
-        default_value="rmul_2024",
-        description="Select world: 'rmul_2024' or 'rmuc_2024' (map file share the same name as the this parameter)",
+        default_value="rmuc2026",
+        description="Basename for map/reality/<world>.yaml and pcd/reality/<world>.pcd",
     )
 
     declare_map_yaml_cmd = DeclareLaunchArgument(
@@ -241,4 +241,3 @@ def generate_launch_description():
     ld.add_action(rviz_cmd)
 
     return ld
-
