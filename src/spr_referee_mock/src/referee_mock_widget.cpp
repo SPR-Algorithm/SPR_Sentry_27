@@ -318,7 +318,7 @@ void RefereeMockWidget::on_preset_battle() {
   GameStateFields f;
   f.game_progress = 4;
   f.current_hp = 600;
-  f.stage_remain_time = 420;
+  f.stage_remain_time = 400;
   f.my_outpost_hp = 1500;
   f.enemy_outpost_hp = 1500;
   f.my_base_hp = 5000;
@@ -343,6 +343,7 @@ void RefereeMockWidget::on_preset_countdown() {
 void RefereeMockWidget::on_preset_enemy_outpost_down() {
   GameStateFields f = read_fields_from_ui();
   f.game_progress = 4;
+  f.stage_remain_time = 420;
   f.enemy_outpost_hp = 0;
   write_fields_to_ui(f);
   sync_node_from_ui();
@@ -353,6 +354,7 @@ void RefereeMockWidget::on_preset_enemy_outpost_down() {
 void RefereeMockWidget::on_preset_early_supply() {
   GameStateFields f = read_fields_from_ui();
   f.game_progress = 4;
+  f.stage_remain_time = 400;
   f.enemy_outpost_hp = 1500;
   f.current_hp = 100;
   f.projectile_allowance_17mm = 0;
@@ -365,6 +367,7 @@ void RefereeMockWidget::on_preset_early_supply() {
 void RefereeMockWidget::on_preset_healed_at_supply() {
   GameStateFields f = read_fields_from_ui();
   f.game_progress = 4;
+  f.stage_remain_time = 400;
   f.enemy_outpost_hp = 0;
   f.current_hp = 400;
   f.projectile_allowance_17mm = 500;
