@@ -1,13 +1,13 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(small_gicp_relocalization)
 
 ## Use C++14
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-## By adding -Wall and -Werror, the compiler does not ignore warnings anymore,
-## enforcing cleaner code.
-add_definitions(-Wall -Werror)
+## Keep project warnings visible, but do not promote warnings from the
+## third-party small_gicp headers to errors.
+add_compile_options(-Wall)
 
 ## Export compile commands for clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -18,7 +18,30 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(OpenMP REQUIRED)
+find_package(small_gicp QUIET CONFIG)
 ament_auto_find_build_dependencies()
+
+# Older versions of this package assumed that small_gicp had been installed
+# globally, but did not declare or discover it.  Match the upstream fix while
+# pinning the dependency so clean workspace builds are reproducible.
+if(NOT small_gicp_FOUND)
+  include(FetchContent)
+  message(STATUS "small_gicp not found; fetching pinned v1.0.0")
+  FetchContent_Declare(
+    small_gicp
+    GIT_REPOSITORY https://github.com/koide3/small_gicp.git
+    GIT_TAG v1.0.0
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_MakeAvailable(small_gicp)
+  set(SMALL_GICP_TARGET small_gicp)
+elseif(TARGET small_gicp::small_gicp)
+  # The installed package exports a namespaced target, while FetchContent
+  # exposes the in-tree target without a namespace.
+  set(SMALL_GICP_TARGET small_gicp::small_gicp)
+else()
+  message(FATAL_ERROR "small_gicp was found but did not export a usable CMake target")
+endif()
 
 ###########
 ## Build ##
@@ -28,7 +51,10 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   DIRECTORY src
 )
 
-target_link_libraries(${PROJECT_NAME} OpenMP::OpenMP_CXX)
+target_link_libraries(${PROJECT_NAME}
+  OpenMP::OpenMP_CXX
+  ${SMALL_GICP_TARGET}
+)
 
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN small_gicp_relocalization::SmallGicpRelocalizationNode
