@@ -254,6 +254,7 @@
           <Sequence _while="early_supply==true &amp;&amp; (projectile_allowance&lt;100 || current_hp&lt;120)">
             <PostureChange posture_change="3"/>
             <Script code="spin_cmd:=0"/>
+            <Script code="return_outpost_arrived:=false"/>
             <Nav2Pose name="supply_early"
                       goal="-1.51,-5.32,0.0,0.0,0.0,0.0,0.0"/>
           </Sequence>

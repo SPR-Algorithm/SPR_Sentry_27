@@ -28,11 +28,13 @@ int main(int argc, char **argv)
   node->declare_parameter<std::string>("tree_xml_file", "");
   node->declare_parameter("tick_period_milliseconds", 3000);
   node->declare_parameter("groot_port", 5556);
+  node->declare_parameter("enable_groot", true);
   node->declare_parameter("tree_node_model_export_path","");
   // topics to blackboard node's param
   node->declare_parameter<double>("tracking_timeout_s", 1.0);
   node->declare_parameter("game_state_topic_name", "game_state");
   node->declare_parameter("target_topic_name", "/tracker/target");
+  node->declare_parameter("subscribe_target", true);
   // spin_or_not node's param
   node->declare_parameter("spin_or_not_topic_name", "spin_or_not");
   node->declare_parameter("align_chassis_frame", "chassis");
@@ -63,6 +65,8 @@ int main(int argc, char **argv)
   timeout = std::chrono::milliseconds(tick_period_milliseconds);
   unsigned int groot_port = 5556;
   node->get_parameter("groot_port",groot_port);
+  bool enable_groot = true;
+  node->get_parameter("enable_groot", enable_groot);
   std::string tree_node_model_export_path;
   node->get_parameter("tree_node_model_export_path",tree_node_model_export_path);
 
@@ -90,7 +94,14 @@ int main(int argc, char **argv)
   
   auto tree = factory.createTreeFromFile(tree_xml_file.c_str());
   std::shared_ptr<BT::Groot2Publisher> groot2publisher_ptr_;
-  groot2publisher_ptr_ = std::make_unique<BT::Groot2Publisher>(tree, groot_port);
+  if (enable_groot)
+  {
+    groot2publisher_ptr_ = std::make_unique<BT::Groot2Publisher>(tree, groot_port);
+  }
+  else
+  {
+    RCLCPP_INFO(node->get_logger(), "Groot2 publisher disabled by parameter");
+  }
 
   unsigned long int tick_count = 0;
   while(rclcpp::ok()){
