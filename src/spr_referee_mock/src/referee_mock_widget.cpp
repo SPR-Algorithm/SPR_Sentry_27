@@ -52,6 +52,12 @@ RefereeMockWidget::RefereeMockWidget(const std::shared_ptr<RefereeMockNode>& nod
   spin_timer_.start(20);
 
   connect(&publish_timer_, &QTimer::timeout, this, &RefereeMockWidget::on_spin_timer);
+
+  // Keep the interactive default off, while allowing launch files to start a
+  // deterministic referee stream for unattended simulation tests.
+  if (node_->get_parameter("auto_publish").as_bool()) {
+    auto_publish_btn_->setChecked(true);
+  }
 }
 
 void RefereeMockWidget::build_ui() {
@@ -317,7 +323,7 @@ void RefereeMockWidget::on_spin_timer() {
 void RefereeMockWidget::on_preset_battle() {
   GameStateFields f;
   f.game_progress = 4;
-  f.current_hp = 600;
+  f.current_hp = 400;
   f.stage_remain_time = 400;
   f.my_outpost_hp = 1500;
   f.enemy_outpost_hp = 1500;
@@ -367,7 +373,7 @@ void RefereeMockWidget::on_preset_early_supply() {
 void RefereeMockWidget::on_preset_healed_at_supply() {
   GameStateFields f = read_fields_from_ui();
   f.game_progress = 4;
-  f.stage_remain_time = 400;
+  // f.stage_remain_time = 400;
   f.enemy_outpost_hp = 0;
   f.current_hp = 400;
   f.projectile_allowance_17mm = 500;

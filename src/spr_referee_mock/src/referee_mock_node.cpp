@@ -10,6 +10,7 @@ RefereeMockNode::RefereeMockNode() : Node("referee_mock") {
   declare_parameter<std::string>("cmd_vel_nav2_topic_name", "cmd_vel_nav2_result");
   declare_parameter<double>("display_stale_timeout_sec", 1.0);
   declare_parameter<double>("publish_rate_hz", 10.0);
+  declare_parameter<bool>("auto_publish", false);
   declare_parameter<int>("current_hp", 600);
   declare_parameter<int>("game_progress", 4);
   declare_parameter<int>("stage_remain_time", 420);

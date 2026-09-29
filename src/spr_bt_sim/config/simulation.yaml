@@ -1,0 +1,73 @@
+decision_sim:
+  # 所有节点均位于此命名空间。修改后无需改 launch 文件。
+  namespace: red_standard_robot1
+  use_rviz: true
+
+  # 当前实车 RMUC 2026 二维地图的只读快照；不依赖实车导航 bringup。
+  map_yaml: map/rmuc2026.yaml
+  rviz_config: rviz/decision_view.rviz
+
+  referee_mock:
+    enabled: true
+    # true: 启动后按下列初值持续发布；GUI 中修改数值会立即成为新数据。
+    auto_publish: true
+    publish_rate_hz: 10.0
+    display_stale_timeout_sec: 1.0
+    current_hp: 400
+    game_progress: 4
+    stage_remain_time: 420
+    armor_id: 7
+    hurt_type: 0
+    my_outpost_hp: 1500
+    enemy_outpost_hp: 1500
+    my_base_hp: 5000
+    enemy_base_hp: 5000
+    projectile_allowance_17mm: 300
+    rfid: 0
+
+  decision:
+    enabled: true
+    # 可使用 package://、绝对路径，或相对本包 share 的路径。
+    tree_xml_file: behavior_tree/RMUC_adaptation_2026_B.xml
+    start_delay_sec: 1.0
+    parameters:
+      tick_period_milliseconds: 100
+      groot_port: 5556
+      enable_groot: false
+      subscribe_target: false
+      tracking_timeout_s: 1.0
+      game_state_topic_name: game_state
+      target_topic_name: tracker/target
+      send_goal_timeout_ms: 1000
+      spin_or_not_topic_name: spin_or_not
+      align_chassis_cmd_vel_topic: cmd_vel_nav2_result
+      align_chassis_frame: chassis
+      align_chassis_angular_sign: 1.0
+      align_chassis_heading_offset_deg: 0.0
+      attack_distance: 2.0
+      vehicle_dim: 0.5
+      global_frame: map
+      base_frame: chassis
+      min_obs_num: 2
+      use_costmap: false
+
+  result_mock:
+    # manual_pose: 默认。RViz "2D Pose Estimate" 进入目标容差后返回成功。
+    # hold: 只显示目标，永不自动完成。
+    # succeed / abort: result_delay_sec 后自动返回成功 / 失败。
+    result_mode: manual_pose
+    result_delay_sec: 1.0
+    xy_tolerance: 0.4
+    # 当前行为树中的目标四元数多数为全 0，因此默认只判定 XY。
+    check_goal_yaw: false
+    yaw_tolerance_deg: 15.0
+    map_frame: map
+    robot_frame: chassis
+    # RViz 第一次手动设位姿前显示的机器人初始位置 [x, y, yaw(rad)]。
+    robot_pose: [0.0, 0.0, 0.0]
+    publish_robot_tf: true
+    initial_pose_topic: initialpose
+    action_name: navigate_to_pose
+    goal_topic: decision_goal
+    marker_topic: decision_markers
+    max_goal_history: 30
