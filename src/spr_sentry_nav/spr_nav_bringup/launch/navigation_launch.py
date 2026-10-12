@@ -13,13 +13,19 @@
 # limitations under the License.
 
 
+"""导航子模块，基于 old/navigation_launch.py。
+
+只保留 Nav2 和 fake_vel_transform；公共数据处理移至 data_processing_launch.py。
+由主入口设置命名空间/TF remap、准备 YAML、创建组件容器。
+"""
+
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, SetEnvironmentVariable
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import LoadComposableNodes, Node
 from launch_ros.descriptions import ComposableNode, ParameterFile
 from nav2_common.launch import RewrittenYaml
@@ -92,7 +98,7 @@ def generate_launch_description():
 
     declare_use_composition_cmd = DeclareLaunchArgument(
         "use_composition",
-        default_value="False",
+        default_value="true",
         description="Use composed bringup if True",
     )
 
@@ -112,51 +118,9 @@ def generate_launch_description():
         "log_level", default_value="info", description="log level"
     )
 
-    start_terrain_analysis_cmd = Node(
-        package="terrain_analysis",
-        executable="terrainAnalysis",
-        name="terrain_analysis",
-        output="screen",
-        respawn=use_respawn,
-        respawn_delay=2.0,
-        arguments=["--ros-args", "--log-level", log_level],
-        parameters=[configured_params],
-    )
-
-    start_terrain_analysis_ext_cmd = Node(
-        package="terrain_analysis_ext",
-        executable="terrainAnalysisExt",
-        name="terrain_analysis_ext",
-        output="screen",
-        respawn=use_respawn,
-        respawn_delay=2.0,
-        arguments=["--ros-args", "--log-level", log_level],
-        parameters=[configured_params],
-    )
-
     load_nodes = GroupAction(
-        condition=IfCondition(PythonExpression(["not ", use_composition])),
+        condition=UnlessCondition(use_composition),
         actions=[
-            Node(
-                package="loam_interface",
-                executable="loam_interface_node",
-                name="loam_interface",
-                output="screen",
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=["--ros-args", "--log-level", log_level],
-            ),
-            Node(
-                package="sensor_scan_generation",
-                executable="sensor_scan_generation_node",
-                name="sensor_scan_generation",
-                output="screen",
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=["--ros-args", "--log-level", log_level],
-            ),
             Node(
                 package="fake_vel_transform",
                 executable="fake_vel_transform_node",
@@ -265,18 +229,6 @@ def generate_launch_description():
         target_container=container_name_full,
         composable_node_descriptions=[
             ComposableNode(
-                package="loam_interface",
-                plugin="loam_interface::LoamInterfaceNode",
-                name="loam_interface",
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package="sensor_scan_generation",
-                plugin="sensor_scan_generation::SensorScanGenerationNode",
-                name="sensor_scan_generation",
-                parameters=[configured_params],
-            ),
-            ComposableNode(
                 package="fake_vel_transform",
                 plugin="fake_vel_transform::FakeVelTransform",
                 name="fake_vel_transform",
@@ -364,8 +316,6 @@ def generate_launch_description():
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
     # Add the actions to launch all of the navigation nodes
-    ld.add_action(start_terrain_analysis_cmd)
-    ld.add_action(start_terrain_analysis_ext_cmd)
     ld.add_action(load_nodes)
     ld.add_action(load_composable_nodes)
 

@@ -13,6 +13,12 @@
 # limitations under the License.
 
 
+"""定位子模块，基于 old/localization_launch.py。
+
+保留地图服务、GICP/静态 map→odom；Point-LIO 移至 data_processing_launch.py。
+namespace 仅用于 YAML/容器定位，节点命名空间由主入口设置。
+"""
+
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -39,7 +45,7 @@ def _localization_setup(context, *args, **kwargs):
     use_respawn = LaunchConfiguration("use_respawn")
     log_level = LaunchConfiguration("log_level")
 
-    use_gicp = _parse_bool(LaunchConfiguration("use_gicp").perform(context))
+    use_gicp = LaunchConfiguration("localization_mode").perform(context) == "gicp"
     map_to_odom_x = float(LaunchConfiguration("map_to_odom_x").perform(context))
     map_to_odom_y = float(LaunchConfiguration("map_to_odom_y").perform(context))
     map_to_odom_yaw = float(LaunchConfiguration("map_to_odom_yaw").perform(context))
@@ -177,12 +183,7 @@ def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
     map_yaml_file = LaunchConfiguration("map")
     use_sim_time = LaunchConfiguration("use_sim_time")
-    autostart = LaunchConfiguration("autostart")
-    prior_pcd_file = LaunchConfiguration("prior_pcd_file")
     params_file = LaunchConfiguration("params_file")
-    use_composition = LaunchConfiguration("use_composition")
-    use_respawn = LaunchConfiguration("use_respawn")
-    log_level = LaunchConfiguration("log_level")
 
     lifecycle_nodes = ["map_server"]
 
@@ -224,37 +225,32 @@ def generate_launch_description():
         description="Full path to prior PCD file to load",
     )
 
-    declare_use_gicp_cmd = DeclareLaunchArgument(
-        "use_gicp",
-        default_value="True",
-        description=(
-            "True: GICP publishes map->odom; init_pose from map_to_odom_*; "
-            "RViz 2D Pose Estimate on /initialpose also works. "
-            "False: static map->odom TF only (no GICP)."
-        ),
+    declare_localization_mode_cmd = DeclareLaunchArgument(
+        "localization_mode", default_value="gicp", choices=["gicp", "static"],
+        description="gicp=PCD重定位；static=固定map→odom",
     )
 
     declare_map_to_odom_x_cmd = DeclareLaunchArgument(
         "map_to_odom_x",
         default_value="0.0",
-        description="Initial map->odom x (m); GICP init_pose[0] when use_gicp is True",
+        description="map→odom初始X，米；gicp模式作为匹配初值，static模式作为固定变换",
     )
 
     declare_map_to_odom_y_cmd = DeclareLaunchArgument(
         "map_to_odom_y",
         default_value="0.0",
-        description="Initial map->odom y (m); GICP init_pose[1] when use_gicp is True",
+        description="map→odom初始Y，米；gicp模式作为匹配初值，static模式作为固定变换",
     )
 
     declare_map_to_odom_yaw_cmd = DeclareLaunchArgument(
         "map_to_odom_yaw",
         default_value="0.0",
-        description="Initial map->odom yaw (rad); GICP init_pose[5] when use_gicp is True",
+        description="map→odom初始偏航角，弧度；GICP初值或固定变换",
     )
 
     declare_params_file_cmd = DeclareLaunchArgument(
         "params_file",
-        default_value=os.path.join(bringup_dir, "params", "nav2_params.yaml"),
+        default_value=os.path.join(bringup_dir, "config", "reality", "nav2_params.yaml"),
         description="Full path to the ROS2 parameters file to use for all launched nodes",
     )
 
@@ -266,7 +262,7 @@ def generate_launch_description():
 
     declare_use_composition_cmd = DeclareLaunchArgument(
         "use_composition",
-        default_value="False",
+        default_value="true",
         description="Use composed bringup if True",
     )
 
@@ -286,20 +282,6 @@ def generate_launch_description():
         "log_level", default_value="info", description="log level"
     )
 
-    start_point_lio_node = Node(
-        package="point_lio",
-        executable="pointlio_mapping",
-        name="point_lio",
-        output="screen",
-        respawn=use_respawn,
-        respawn_delay=2.0,
-        parameters=[
-            configured_params,
-            {"prior_pcd.prior_pcd_map_path": prior_pcd_file},
-        ],
-        arguments=["--ros-args", "--log-level", log_level],
-    )
-
     localization_setup = OpaqueFunction(
         function=_localization_setup,
         kwargs={
@@ -317,7 +299,7 @@ def generate_launch_description():
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_prior_pcd_file_cmd)
-    ld.add_action(declare_use_gicp_cmd)
+    ld.add_action(declare_localization_mode_cmd)
     ld.add_action(declare_map_to_odom_x_cmd)
     ld.add_action(declare_map_to_odom_y_cmd)
     ld.add_action(declare_map_to_odom_yaw_cmd)
@@ -328,7 +310,6 @@ def generate_launch_description():
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
 
-    ld.add_action(start_point_lio_node)
     ld.add_action(localization_setup)
 
     return ld

@@ -13,9 +13,16 @@ find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+# old/只保留源码归档。ROS 2按文件名递归查找，不能将同名旧launch一起安装。
+install(DIRECTORY launch/
+  DESTINATION share/${PROJECT_NAME}/launch
+  FILES_MATCHING PATTERN "*.py"
+  PATTERN "old" EXCLUDE
+  PATTERN "__pycache__" EXCLUDE
+)
+
 ament_auto_package(
   INSTALL_TO_SHARE
-  launch
   map
   pcd
   config

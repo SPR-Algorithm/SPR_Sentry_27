@@ -13,6 +13,12 @@
 # limitations under the License.
 
 
+"""建图子模块，基于 old/slam_launch.py。
+
+保留 SLAM Toolbox、地图保存服务与原静态 TF 策略；
+Point-LIO 和点云转扫描移至 data_processing_launch.py。命名空间由主入口设置。
+"""
+
 import os
 
 from ament_index_python.packages import get_package_share_directory
@@ -61,7 +67,7 @@ def generate_launch_description():
 
     declare_params_file_cmd = DeclareLaunchArgument(
         "params_file",
-        default_value=os.path.join(bringup_dir, "params", "nav2_params.yaml"),
+        default_value=os.path.join(bringup_dir, "config", "reality", "nav2_params.yaml"),
         description="Full path to the ROS2 parameters file to use for all launched nodes",
     )
 
@@ -116,21 +122,6 @@ def generate_launch_description():
         ],
     )
 
-    start_pointcloud_to_laserscan_node = Node(
-        package="pointcloud_to_laserscan",
-        executable="pointcloud_to_laserscan_node",
-        name="pointcloud_to_laserscan",
-        output="screen",
-        respawn=use_respawn,
-        respawn_delay=2.0,
-        parameters=[configured_params],
-        arguments=["--ros-args", "--log-level", log_level],
-        remappings=[
-            ("cloud_in", "terrain_map_ext"),
-            ("scan", "obstacle_scan"),
-        ],
-    )
-
     start_sync_slam_toolbox_node = Node(
         package="slam_toolbox",
         executable="sync_slam_toolbox_node",
@@ -145,21 +136,6 @@ def generate_launch_description():
             ("/map_metadata", "map_metadata"),
             ("/map_updates", "map_updates"),
         ],
-    )
-
-    start_point_lio_node = Node(
-        package="point_lio",
-        executable="pointlio_mapping",
-        name="point_lio",
-        output="screen",
-        respawn=use_respawn,
-        respawn_delay=2.0,
-        parameters=[
-            configured_params,
-            {"prior_pcd.enable": False},
-            {"pcd_save.pcd_save_en": True},
-        ],
-        arguments=["--ros-args", "--log-level", log_level],
     )
 
     start_static_transform_node = Node(
@@ -203,9 +179,7 @@ def generate_launch_description():
     ld.add_action(start_map_saver_server_cmd)
     ld.add_action(start_lifecycle_manager_cmd)
 
-    ld.add_action(start_pointcloud_to_laserscan_node)
     ld.add_action(start_sync_slam_toolbox_node)
-    ld.add_action(start_point_lio_node)
     ld.add_action(start_static_transform_node)
 
     return ld
