@@ -10,7 +10,7 @@ txt/
 *.pcd
 *.pdf
 ARCHITECTURE.html
-/*.pgm
-/*.yaml
-/*.jpeg
-/*.jpg
+map/
+script/old/
+src/spr_sentry_nav/spr_nav_bringup/launch/old/
+src/spr_sentry_nav/spr_nav_bringup/test
