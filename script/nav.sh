@@ -1,4 +1,4 @@
-cd /home/SPR_Sentry_27
+cd ~/SPR_Sentry_27
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # 启动顺序：串口 → robot_description → 导航（需 Livox 有点云后 odom 帧才会出现）

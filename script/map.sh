@@ -1,4 +1,4 @@
-cd /home/SPR_Sentry_27
+cd ~/SPR_Sentry_27
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 cmds=( 
   "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_sentry_serial spr_sentry_serial_launch.py"
