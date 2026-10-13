@@ -1,42 +1,45 @@
-#!/usr/bin/env bash
-
-set -euo pipefail
-
-workspace="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$workspace"
-
-map_profile="${1:-map_0521}"
-if (($# > 0)); then
-  shift
-fi
-
-source /opt/ros/humble/setup.bash
+cd /home/SPR_Sentry_27
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
-open_terminal() {
-  local title="$1"
-  shift
+# 启动顺序：串口 → robot_description → 导航（需 Livox 有点云后 odom 帧才会出现）
+# 先验地图与当前环境一致：默认 use_gicp:=True，由 small_gicp_relocalization 发布 map->odom（勿设静态 TF）
+cmds=( 
+ "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_sentry_serial spr_sentry_serial_launch.py"
+ 
+ "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_robot_description robot_description_launch.py"
+ 
+ "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_nav_bringup bringup_launch.py map_profile:=map_0521 mode:=localization localization_mode:=gicp use_robot_state_pub:=False"
+ 
+#"ros2 launch spr_decision run.launch.py params_file_name:=node_params"
 
-  local command workspace_command
-  printf -v command '%q ' "$@"
-  printf -v workspace_command '%q' "$workspace"
+#~/Groot2/bin/groot2
 
-  gnome-terminal --title="$title" -- bash -lc \
-    "cd $workspace_command && source /opt/ros/humble/setup.bash && source install/setup.bash && $command; exec bash"
-}
+)
 
-# 串口不属于 bringup_launch.py，仍需单独启动。
-open_terminal "SPR serial" \
-  ros2 launch spr_sentry_serial spr_sentry_serial_launch.py
+for cmd in "${cmds[@]}";
+do
+	echo Current CMD : "$cmd"
+	gnome-terminal -- bash -c "cd $(pwd);source install/setup.bash;$cmd;exec bash;"
+	sleep 0.2
+done
 
-sleep 0.5
 
-# 用法：./script/nav.sh [map_profile] [其他 launch 参数...]
-# map_profile 必须同时存在对应的 map/reality/*.yaml 和 pcd/reality/*.pcd。
-open_terminal "SPR navigation" \
-  ros2 launch spr_nav_bringup bringup_launch.py \
-  mode:=localization \
-  localization_mode:=gicp \
-  "map_profile:=$map_profile" \
-  use_robot_state_pub:=true \
-  "$@"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,38 +1,31 @@
-#!/usr/bin/env bash
-
-set -euo pipefail
-
-workspace="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$workspace"
-
-source /opt/ros/humble/setup.bash
+cd /home/SPR_Sentry_27
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+cmds=( 
+  "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_sentry_serial spr_sentry_serial_launch.py"
+  "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_robot_description robot_description_launch.py"
+  "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_nav_bringup bringup_launch.py mode:=slam use_navigation:=false use_robot_state_pub:=False"
+  #"ros2 bag play rosbag2_2025_05_27-19_02_42" #6.23
+  #"source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 bag record   /red_standard_robot1/tf  /red_standard_robot1/tf_static  /red_standard_robot1/livox/imu   /red_standard_robot1/livox/lidar"
+ # "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 bag record   /red_standard_robot1/serial/gimbal_joint_state   /red_standard_robot1/livox/imu   /red_standard_robot1/livox/lidar"
+	)
 
-open_terminal() {
-  local title="$1"
-  shift
+for cmd in "${cmds[@]}";
+do
+  echo "Current CMD : $cmd"
+  gnome-terminal -- bash -c "cd $(pwd); $cmd; exec bash"
+  sleep 0.5
+done
+#    ros2 run nav2_map_server map_saver_cli -f ground2
+# ros2 run nav2_map_server map_saver_cli -f map_0711 --ros-args -r __ns:=/red_standard_robot1
 
-  local command workspace_command
-  printf -v command '%q ' "$@"
-  printf -v workspace_command '%q' "$workspace"
 
-  gnome-terminal --title="$title" -- bash -lc \
-    "cd $workspace_command && source /opt/ros/humble/setup.bash && source install/setup.bash && $command; exec bash"
-}
 
-# 串口不属于 bringup_launch.py，仍需单独启动。
-open_terminal "SPR serial" \
-  ros2 launch spr_sentry_serial spr_sentry_serial_launch.py
 
-sleep 0.5
+#   ros2 service call /red_standard_robot1/slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: '/home/spr/nav2_ws_slam/map_0711.pbstream'}"
 
-# 建图只启动 SLAM 所需链路；robot_description 由统一入口一并启动。
-open_terminal "SPR mapping" \
-  ros2 launch spr_nav_bringup bringup_launch.py \
-  mode:=slam \
-  use_navigation:=false \
-  use_robot_state_pub:=true \
-  "$@"
 
-# 地图保存示例（另开终端执行）：
-# ros2 run nav2_map_server map_saver_cli -f <map_name> --ros-args -r __ns:=/red_standard_robot1
+
+
+
+
+
