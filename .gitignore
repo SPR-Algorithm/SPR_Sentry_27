@@ -1,15 +1,8 @@
-.cache/
 .vscode/
-__pycache__/
-*.py[cod]
 build/
 install/
 log/
-rules/
 txt/
-*.pcd
-*.pdf
-ARCHITECTURE.html
 map/
 script/old/
 src/spr_sentry_nav/spr_nav_bringup/launch/old/

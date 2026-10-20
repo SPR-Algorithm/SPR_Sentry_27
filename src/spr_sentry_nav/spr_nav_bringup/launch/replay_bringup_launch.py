@@ -31,6 +31,7 @@ from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, PushRosNamespace, SetRemap
+from launch_ros.descriptions import ParameterFile
 from nav2_common.launch import ReplaceString, RewrittenYaml
 
 
@@ -91,10 +92,17 @@ def _setup(context):
         PushRosNamespace(namespace), SetRemap("/tf", "tf"), SetRemap("/tf_static", "tf_static"),
     ]
     if enabled("use_composition"):
+        # 与实时入口一致，保留完整的进程级YAML，供组件内部创建的节点读取。
+        container_params = ParameterFile(RewrittenYaml(
+            source_file=prepared_params, root_key=namespace,
+            param_rewrites={}, convert_types=True,
+        ), allow_substs=True)
         nodes.append(Node(
             package="rclcpp_components", executable="component_container_isolated",
             name="nav2_container", output="screen",
-            parameters=[{"use_sim_time": enabled("use_sim_time")}],
+            parameters=[container_params, {
+                "use_sim_time": enabled("use_sim_time"), "autostart": enabled("autostart"),
+            }],
             arguments=["--ros-args", "--log-level", value("log_level")],
         ))
     nodes.extend([

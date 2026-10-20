@@ -76,32 +76,47 @@ def _setup(context):
     ))
 
     # sensor_scan_generation 实际发布 odom→base_footprint，不能随导航关闭。
-    components = []
-    for package, executable, plugin in [
-        ("loam_interface", "loam_interface_node", "loam_interface::LoamInterfaceNode"),
-        ("sensor_scan_generation", "sensor_scan_generation_node", "sensor_scan_generation::SensorScanGenerationNode"),
-    ]:
-        if enabled("use_composition"):
-            components.append(ComposableNode(
-                package=package, plugin=plugin, name=package, parameters=[configured_params],
-            ))
-        else:
-            actions.append(Node(
-                package=package, executable=executable, name=package,
-                parameters=[configured_params], **options,
-            ))
-    if components:
+    # 以下定义逐个沿用 old/navigation_launch.py，不通过包名推导节点名或插件名。
+    # 只移动所属模块；关闭导航时，这两个节点仍是里程计/TF数据链的一部分。
+    if enabled("use_composition"):
         actions.append(LoadComposableNodes(
             target_container="/" + "/".join(filter(None, [namespace, value("container_name")])),
-            composable_node_descriptions=components,
+            composable_node_descriptions=[
+                ComposableNode(
+                    package="loam_interface",
+                    plugin="loam_interface::LoamInterfaceNode",
+                    name="loam_interface",
+                    parameters=[configured_params],
+                ),
+                ComposableNode(
+                    package="sensor_scan_generation",
+                    plugin="sensor_scan_generation::SensorScanGenerationNode",
+                    name="sensor_scan_generation",
+                    parameters=[configured_params],
+                ),
+            ],
         ))
-    for package, executable in [
-        ("terrain_analysis", "terrainAnalysis"), ("terrain_analysis_ext", "terrainAnalysisExt"),
-    ]:
-        actions.append(Node(
-            package=package, executable=executable, name=package,
+    else:
+        actions.extend([
+            Node(
+                package="loam_interface", executable="loam_interface_node",
+                name="loam_interface", parameters=[configured_params], **options,
+            ),
+            Node(
+                package="sensor_scan_generation", executable="sensor_scan_generation_node",
+                name="sensor_scan_generation", parameters=[configured_params], **options,
+            ),
+        ])
+    actions.extend([
+        Node(
+            package="terrain_analysis", executable="terrainAnalysis", name="terrain_analysis",
             parameters=[configured_params], **options,
-        ))
+        ),
+        Node(
+            package="terrain_analysis_ext", executable="terrainAnalysisExt",
+            name="terrain_analysis_ext", parameters=[configured_params], **options,
+        ),
+    ])
     if value("mode") == "slam":
         actions.append(Node(
             package="pointcloud_to_laserscan", executable="pointcloud_to_laserscan_node",

@@ -25,6 +25,7 @@ from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, PushRosNamespace, SetRemap
+from launch_ros.descriptions import ParameterFile
 from nav2_common.launch import ReplaceString, RewrittenYaml
 
 
@@ -124,10 +125,18 @@ def _setup(context):
     ]
     # 只创建一个容器，数据处理、定位和导航模块共用；驱动内部录制不需要容器。
     if not driver_bag and enabled("use_composition"):
+        # 必须把完整、带命名空间的YAML交给容器进程。组件加载请求只提取组件
+        # 自身参数，controller/planner内部创建的costmap须从进程参数中读取配置。
+        container_params = ParameterFile(RewrittenYaml(
+            source_file=prepared_params, root_key=namespace,
+            param_rewrites={"yaml_filename": map_yaml}, convert_types=True,
+        ), allow_substs=True)
         nodes.append(Node(
             package="rclcpp_components", executable="component_container_isolated",
             name="nav2_container", output="screen",
-            parameters=[{"use_sim_time": enabled("use_sim_time")}],
+            parameters=[container_params, {
+                "use_sim_time": enabled("use_sim_time"), "autostart": enabled("autostart"),
+            }],
             arguments=["--ros-args", "--log-level", value("log_level")],
         ))
     nodes.append(_include(os.path.join(launch_dir, "data_processing_launch.py"), {
