@@ -46,6 +46,7 @@ class RefereeMockWidget : public QMainWindow {
   void write_fields_to_ui(const GameStateFields& fields);
 
   std::shared_ptr<RefereeMockNode> node_;
+  rclcpp::executors::SingleThreadedExecutor executor_;
   QTimer spin_timer_;
   QTimer publish_timer_;
 

@@ -14,6 +14,10 @@
 
 #include "small_gicp_relocalization/small_gicp_relocalization.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+
 #include "pcl/common/transforms.h"
 #include "pcl_conversions/pcl_conversions.h"
 #include "small_gicp/pcl/pcl_registration.hpp"
@@ -56,6 +60,19 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("init_pose", init_pose_);
   this->get_parameter("input_cloud_topic", input_cloud_topic_);
 
+  if (num_threads_ <= 0 || num_neighbors_ < 3 ||
+    !std::isfinite(global_leaf_size_) || global_leaf_size_ <= 0 ||
+    !std::isfinite(registered_leaf_size_) || registered_leaf_size_ <= 0 ||
+    !std::isfinite(max_dist_sq_) || max_dist_sq_ <= 0 || init_pose_.size() != 6)
+  {
+    throw std::invalid_argument("Invalid GICP sampling/registration parameters or init_pose size");
+  }
+  for (const auto value : init_pose_) {
+    if (!std::isfinite(value)) {
+      throw std::invalid_argument("GICP init_pose must be finite");
+    }
+  }
+
   // [x, y, z, roll, pitch, yaw] - init_pose parameters
   if (!init_pose_.empty() && init_pose_.size() >= 6) {
     result_t_.translation() << init_pose_[0], init_pose_[1], init_pose_[2];
@@ -72,22 +89,17 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
     small_gicp::Registration<small_gicp::GICPFactor, small_gicp::ParallelReductionOMP>>();
 
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
-  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
+  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_, this, true);
+  // Legacy launches retain direct TF; the new bringup delegates it to the manager.
+  publish_tf_ = this->declare_parameter<bool>("publish_tf", true);
+  if (publish_tf_) {
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
+  } else {
+    transform_pub_ = this->create_publisher<geometry_msgs::msg::TransformStamped>(
+      "localization/gicp_transform", 10);
+  }
 
   loadGlobalMap(prior_pcd_file_);
-
-  // Downsample points and convert them into pcl::PointCloud<pcl::PointCovariance>
-  target_ = small_gicp::voxelgrid_sampling_omp<
-    pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(
-    *global_map_, global_leaf_size_);
-
-  // Estimate covariances of points
-  small_gicp::estimate_covariances_omp(*target_, num_neighbors_, num_threads_);
-
-  // Create KdTree for target
-  target_tree_ = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
-    target_, small_gicp::KdTreeBuilderOMP(num_threads_));
 
   pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     input_cloud_topic_, 10,
@@ -101,60 +113,98 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
     std::chrono::milliseconds(500),  // 2 Hz
     std::bind(&SmallGicpRelocalizationNode::performRegistration, this));
 
-  transform_timer_ = this->create_wall_timer(
-    std::chrono::milliseconds(50),  // 20 Hz
-    std::bind(&SmallGicpRelocalizationNode::publishTransform, this));
+  if (publish_tf_) {
+    transform_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(50),  // 20 Hz (legacy direct TF only)
+      std::bind(&SmallGicpRelocalizationNode::publishTransform, this));
+  }
 }
 
 void SmallGicpRelocalizationNode::loadGlobalMap(const std::string & file_name)
 {
   if (pcl::io::loadPCDFile<pcl::PointXYZ>(file_name, *global_map_) == -1) {
-    RCLCPP_ERROR(this->get_logger(), "Couldn't read PCD file: %s", file_name.c_str());
-    return;
+    throw std::runtime_error("Cannot read GICP PCD: " + file_name);
+  }
+  // Reject unusable maps instead of constructing a registration target from empty data.
+  auto & points = global_map_->points;
+  points.erase(std::remove_if(points.begin(), points.end(), [](const pcl::PointXYZ & p) {
+    return !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z);
+  }), points.end());
+  global_map_->width = static_cast<uint32_t>(points.size());
+  global_map_->height = 1;
+  global_map_->is_dense = true;
+  if (points.size() < static_cast<size_t>(num_neighbors_)) {
+    throw std::runtime_error("GICP PCD contains too few finite points: " + file_name);
   }
   RCLCPP_INFO(this->get_logger(), "Loaded global map with %zu points", global_map_->points.size());
+}
 
-  // NOTE: Transform global pcd_map (based on `lidar_odom` frame) to the `odom` frame
-  Eigen::Affine3d odom_to_lidar_odom;
-  while (true) {
-    try {
-      auto tf_stamped = tf_buffer_->lookupTransform(
-        base_frame_, lidar_frame_, this->now(), rclcpp::Duration::from_seconds(1.0));
-      odom_to_lidar_odom = tf2::transformToEigen(tf_stamped.transform);
-      RCLCPP_INFO_STREAM(
-        this->get_logger(), "odom_to_lidar_odom: translation = "
-                              << odom_to_lidar_odom.translation().transpose() << ", rpy = "
-                              << odom_to_lidar_odom.rotation().eulerAngles(0, 1, 2).transpose());
-      break;
-    } catch (tf2::TransformException & ex) {
-      RCLCPP_WARN(this->get_logger(), "TF lookup failed: %s Retrying...", ex.what());
-      rclcpp::sleep_for(std::chrono::seconds(1));
-    }
+bool SmallGicpRelocalizationNode::initializeTarget()
+{
+  if (target_tree_) {
+    return true;
   }
-  pcl::transformPointCloud(*global_map_, *global_map_, odom_to_lidar_odom);
+  try {
+    // Nonblocking: do not hold the component load service hostage waiting for robot TF.
+    const auto transform = tf_buffer_->lookupTransform(base_frame_, lidar_frame_, tf2::TimePointZero);
+    pcl::PointCloud<pcl::PointXYZ> transformed;
+    pcl::transformPointCloud(
+      *global_map_, transformed, tf2::transformToEigen(transform.transform).matrix());
+    auto target = small_gicp::voxelgrid_sampling_omp<
+      pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(
+      transformed, global_leaf_size_);
+    if (target->size() < static_cast<size_t>(num_neighbors_)) {
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000, "GICP map too sparse after filtering");
+      return false;
+    }
+    small_gicp::estimate_covariances_omp(*target, num_neighbors_, num_threads_);
+    target_ = target;
+    target_tree_ = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
+      target_, small_gicp::KdTreeBuilderOMP(num_threads_));
+    RCLCPP_INFO(get_logger(), "GICP target ready; robot TF acquired");
+    return true;
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Waiting for robot TF: %s", ex.what());
+    return false;
+  }
 }
 
 void SmallGicpRelocalizationNode::registeredPcdCallback(
   const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
+  if (!target_tree_) {
+    return;  // Do not accumulate unbounded scans while robot TF is absent.
+  }
   last_scan_time_ = msg->header.stamp;
   current_scan_frame_id_ = msg->header.frame_id;
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr scan(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::fromROSMsg(*msg, *scan);
-  *accumulated_cloud_ += *scan;
+  for (const auto & p : scan->points) {
+    if (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z)) {
+      accumulated_cloud_->push_back(p);
+    }
+  }
 }
 
 void SmallGicpRelocalizationNode::performRegistration()
 {
+  if (!initializeTarget()) {
+    return;
+  }
   if (accumulated_cloud_->empty()) {
-    RCLCPP_WARN(this->get_logger(), "No accumulated points to process.");
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "No accumulated points to process.");
     return;
   }
 
   source_ = small_gicp::voxelgrid_sampling_omp<
     pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(
     *accumulated_cloud_, registered_leaf_size_);
+
+  if (source_->size() < static_cast<size_t>(num_neighbors_)) {
+    accumulated_cloud_->clear();
+    return;
+  }
 
   small_gicp::estimate_covariances_omp(*source_, num_neighbors_, num_threads_);
 
@@ -171,8 +221,12 @@ void SmallGicpRelocalizationNode::performRegistration()
 
   auto result = register_->align(*target_, *source_, *target_tree_, previous_result_t_);
 
-  if (result.converged) {
+  if (result.converged && result.num_inliers > 0 && result.T_target_source.matrix().allFinite()) {
     result_t_ = previous_result_t_ = result.T_target_source;
+    // No heartbeat on failure: the manager must distinguish fresh matches from held TF.
+    if (!publish_tf_) {
+      publishTransform();
+    }
   } else {
     RCLCPP_WARN(this->get_logger(), "GICP did not converge.");
   }
@@ -188,7 +242,8 @@ void SmallGicpRelocalizationNode::publishTransform()
 
   geometry_msgs::msg::TransformStamped transform_stamped;
   // `+ 0.1` means transform into future. according to https://robotics.stackexchange.com/a/96615
-  transform_stamped.header.stamp = last_scan_time_ + rclcpp::Duration::from_seconds(0.1);
+  transform_stamped.header.stamp =
+    last_scan_time_ + rclcpp::Duration::from_seconds(publish_tf_ ? 0.1 : 0.0);
   transform_stamped.header.frame_id = map_frame_;
   transform_stamped.child_frame_id = odom_frame_;
 
@@ -203,7 +258,11 @@ void SmallGicpRelocalizationNode::publishTransform()
   transform_stamped.transform.rotation.z = rotation.z();
   transform_stamped.transform.rotation.w = rotation.w();
 
-  tf_broadcaster_->sendTransform(transform_stamped);
+  if (publish_tf_) {
+    tf_broadcaster_->sendTransform(transform_stamped);
+  } else {
+    transform_pub_->publish(transform_stamped);
+  }
 }
 
 void SmallGicpRelocalizationNode::initialPoseCallback(

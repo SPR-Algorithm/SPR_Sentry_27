@@ -15,7 +15,7 @@
 
 """定位子模块，基于 old/localization_launch.py。
 
-保留地图服务、GICP/静态 map→odom；Point-LIO 移至 data_processing_launch.py。
+保留地图服务、GICP；map→odom由主入口的TF管理器发布，Point-LIO在数据模块。
 namespace 仅用于 YAML/容器定位，节点命名空间由主入口设置。
 """
 
@@ -59,35 +59,7 @@ def _localization_setup(context, *args, **kwargs):
 
     actions = []
 
-    # use_gicp=False: static map->odom (LIO-style). use_gicp=True: GICP only (no static TF).
-    if not use_gicp:
-        actions.append(
-            Node(
-                package="tf2_ros",
-                executable="static_transform_publisher",
-                name="static_transform_publisher_map2odom",
-                output="screen",
-                arguments=[
-                    "--x",
-                    str(map_to_odom_x),
-                    "--y",
-                    str(map_to_odom_y),
-                    "--z",
-                    "0.0",
-                    "--roll",
-                    "0.0",
-                    "--pitch",
-                    "0.0",
-                    "--yaw",
-                    str(map_to_odom_yaw),
-                    "--frame-id",
-                    "map",
-                    "--child-frame-id",
-                    "odom",
-                ],
-            )
-        )
-
+    # static模式无需定位算法；固定变换也由主入口的TF管理器动态发布。
     if use_composition_enabled:
         composable_nodes = [
             ComposableNode(
@@ -119,7 +91,7 @@ def _localization_setup(context, *args, **kwargs):
                     parameters=[
                         configured_params,
                         {"prior_pcd_file": prior_pcd_path},
-                        {"init_pose": init_pose},
+                        {"init_pose": init_pose, "publish_tf": False},
                     ],
                 ),
             )
@@ -167,7 +139,7 @@ def _localization_setup(context, *args, **kwargs):
                     parameters=[
                         configured_params,
                         {"prior_pcd_file": prior_pcd_path},
-                        {"init_pose": init_pose},
+                        {"init_pose": init_pose, "publish_tf": False},
                     ],
                     arguments=["--ros-args", "--log-level", log_level],
                 ),

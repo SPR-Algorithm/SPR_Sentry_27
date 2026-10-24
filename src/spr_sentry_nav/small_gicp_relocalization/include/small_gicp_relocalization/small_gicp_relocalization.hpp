@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "pcl/io/pcd_io.h"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
@@ -43,12 +44,15 @@ public:
 private:
   void registeredPcdCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
   void loadGlobalMap(const std::string & file_name);
+  bool initializeTarget();
   void performRegistration();
   void publishTransform();
   void initialPoseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcd_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_sub_;
+  rclcpp::Publisher<geometry_msgs::msg::TransformStamped>::SharedPtr transform_pub_;
+  bool publish_tf_;
 
   int num_threads_;
   int num_neighbors_;

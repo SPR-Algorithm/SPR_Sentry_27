@@ -6,7 +6,7 @@
 
 本工程的实际启动与配置入口为：
 
-- `spr_nav_bringup/launch/rm_navigation_reality_lio_launch.py`
+- `spr_nav_bringup/launch/bringup_launch.py`
 - `spr_nav_bringup/config/reality/nav2_params.yaml`
 - `spr_nav_bringup/config/reality/mid360_user_config.json`
 
@@ -18,7 +18,7 @@
 - Livox `CustomMsg` 与 `PointCloud2` 发布；
 - 单话题双格式发布能力；
 - IMU 安装角旋转；
-- 基于 `rosbag2_cpp` 的 ROS2 bag2 点云/IMU录制；
+- 基于 `rosbag2_cpp` 的 ROS2 bag2 点云/IMU录制能力（整车新入口不使用）；
 - 内置 x86_64 与 ARM64 Livox-SDK2 动态库。
 
 构建：
@@ -29,7 +29,12 @@ colcon build --symlink-install --packages-select livox_ros_driver2
 
 ## ROS2 bag 录制
 
-驱动内部录包已经使用 `rosbag2_cpp`，输出是可由 `ros2 bag info` 和 `ros2 bag play` 读取的标准 ROS2 bag2。参数为：
+驱动保留内部录制能力，但新 bringup 固定使用 `output_data_type=0` 发布话题，不启用内部录制。
+整车统一通过主 launch 的 `use_rosbag_record:=true rosbag_path:=rosbags` 录制，完整启动示例见 `script/record.sh`。
+输出为 `rosbag_path/rosbag_时间_唯一后缀/` 下的 `.db3` 与 `metadata.yaml`。
+按 Ctrl+C 正常结束 launch，等待 rosbag2 收尾；新入口不提供驱动内部或轻量录制模式。
+
+以下为驱动自身保留的内部录制参数，不是主 launch 参数：
 
 ```yaml
 output_data_type: 1
@@ -38,13 +43,6 @@ enable_lidar_bag: true
 enable_imu_bag: true
 ```
 
-`rosbag_path` 是待创建的 bag 目录，启动前不能已经存在。`output_data_type=1` 为“只写 bag、不发布 DDS 话题”；正常导航仍使用 `output_data_type=0`。
-
-如果需要在正常发布话题的同时录制整套系统数据，应保持 `output_data_type=0`，在另一个终端使用：
-
-```bash
-ros2 bag record /red_standard_robot1/livox/lidar_merged \
-  /red_standard_robot1/livox/imu_192_168_1_194
-```
-
-停止录制时使用 `Ctrl+C`/SIGINT，让 rosbag2 正常关闭并写入 `metadata.yaml`。
+内部 `output_data_type=1` 只写 bag、不发布 DDS 话题，不能用于当前导航/建图数据链。
+这里的 `rosbag_path` 是待创建且尚不存在的 bag 目录，不同于主 launch 的录制根目录。
+`lvx_file_path` 仅恢复原有占位参数，不代表支持 LVX 文件回放。

@@ -74,7 +74,7 @@ private:
 
   std::mutex cmd_vel_mutex_;
   geometry_msgs::msg::Twist::SharedPtr latest_cmd_vel_;
-  double current_robot_base_angle_;
+  double current_robot_base_angle_{0.0};
   rclcpp::Time last_controller_activate_time_;
 };
 

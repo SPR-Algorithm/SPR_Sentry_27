@@ -360,10 +360,16 @@ int main(int argc, char ** argv)
   Eigen::Matrix<double, 24, 24> Q_input = process_noise_cov_input();
   Eigen::Matrix<double, 30, 30> Q_output = process_noise_cov_output();
   /*** debug record ***/
-  FILE * fp;
-  string pos_log_dir = root_dir + "/Log/pos_log.txt";
-  fp = fopen(pos_log_dir.c_str(), "w");
-  open_file();
+  FILE * fp = nullptr;
+  if (runtime_pos_log) {
+    string pos_log_dir = root_dir + "/Log/pos_log.txt";
+    fp = fopen(pos_log_dir.c_str(), "w");
+    open_file();
+    if (!fp || !fout_out || !fout_imu_pbp) {
+      RCLCPP_WARN(nh->get_logger(), "Cannot open debug logs; runtime position logging disabled");
+      runtime_pos_log = false;
+    }
+  }
 
   /*** ROS subscribe initialization ***/
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_pcl_pc;
@@ -994,11 +1000,13 @@ int main(int argc, char ** argv)
         aver_time_match = aver_time_match * (frame_num - 1) / frame_num + (match_time) / frame_num;
         aver_time_solve = aver_time_solve * (frame_num - 1) / frame_num + solve_time / frame_num;
         aver_time_propag = aver_time_propag * (frame_num - 1) / frame_num + propag_time / frame_num;
-        T1[time_log_counter] = Measures.lidar_beg_time;
-        s_plot[time_log_counter] = t5 - t0;
-        s_plot2[time_log_counter] = feats_undistort->points.size();
-        s_plot3[time_log_counter] = aver_time_consu;
-        time_log_counter++;
+        if (time_log_counter < MAXN) {
+          T1[time_log_counter] = Measures.lidar_beg_time;
+          s_plot[time_log_counter] = t5 - t0;
+          s_plot2[time_log_counter] = feats_undistort->points.size();
+          s_plot3[time_log_counter] = aver_time_consu;
+          time_log_counter++;
+        }
         printf(
           "[ mapping ]: time: IMU + Map + Input Downsample: %0.6f ave match: %0.6f ave solve: "
           "%0.6f  ave ICP: %0.6f  map incre: %0.6f ave total: %0.6f icp: %0.6f propogate: %0.6f \n",
@@ -1038,5 +1046,6 @@ int main(int argc, char ** argv)
   }
   fout_out.close();
   fout_imu_pbp.close();
+  if (fp) fclose(fp);
   return 0;
 }

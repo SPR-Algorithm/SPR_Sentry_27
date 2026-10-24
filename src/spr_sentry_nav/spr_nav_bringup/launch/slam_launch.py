@@ -15,7 +15,7 @@
 
 """建图子模块，基于 old/slam_launch.py。
 
-保留 SLAM Toolbox、地图保存服务与原静态 TF 策略；
+保留 SLAM Toolbox、地图保存服务；位姿交给主入口的TF管理器，禁止直接发布map→odom；
 Point-LIO 和点云转扫描移至 data_processing_launch.py。命名空间由主入口设置。
 """
 
@@ -24,7 +24,6 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
@@ -42,7 +41,6 @@ def generate_launch_description():
     autostart = LaunchConfiguration("autostart")
     use_respawn = LaunchConfiguration("use_respawn")
     log_level = LaunchConfiguration("log_level")
-    publish_static_map_to_odom = LaunchConfiguration("publish_static_map_to_odom")
 
     # Variables
     lifecycle_nodes = ["map_saver"]
@@ -93,12 +91,6 @@ def generate_launch_description():
         "log_level", default_value="info", description="log level"
     )
 
-    declare_publish_static_map_to_odom_cmd = DeclareLaunchArgument(
-        "publish_static_map_to_odom",
-        default_value="True",
-        description="Publish identity map->odom static TF",
-    )
-
     start_map_saver_server_cmd = Node(
         package="nav2_map_server",
         executable="map_saver_server",
@@ -132,35 +124,10 @@ def generate_launch_description():
         parameters=[configured_params],
         arguments=["--ros-args", "--log-level", log_level],
         remappings=[
+            ("pose", "localization/slam_pose"),
             ("/map", "map"),
             ("/map_metadata", "map_metadata"),
             ("/map_updates", "map_updates"),
-        ],
-    )
-
-    start_static_transform_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="static_transform_publisher_map2odom",
-        output="screen",
-        condition=IfCondition(publish_static_map_to_odom),
-        arguments=[
-            "--x",
-            "0.0",
-            "--y",
-            "0.0",
-            "--z",
-            "0.0",
-            "--roll",
-            "0.0",
-            "--pitch",
-            "0.0",
-            "--yaw",
-            "0.0",
-            "--frame-id",
-            "map",
-            "--child-frame-id",
-            "odom",
         ],
     )
 
@@ -173,13 +140,11 @@ def generate_launch_description():
     ld.add_action(declare_autostart_cmd)
     ld.add_action(declare_use_respawn_cmd)
     ld.add_action(declare_log_level_cmd)
-    ld.add_action(declare_publish_static_map_to_odom_cmd)
 
     # Running Map Saver Server
     ld.add_action(start_map_saver_server_cmd)
     ld.add_action(start_lifecycle_manager_cmd)
 
     ld.add_action(start_sync_slam_toolbox_node)
-    ld.add_action(start_static_transform_node)
 
     return ld

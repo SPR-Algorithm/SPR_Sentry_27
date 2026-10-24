@@ -22,7 +22,7 @@ int main(int argc, char **argv)
   std::shared_ptr<tf2_ros::Buffer> tf_buffer;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener;
   tf_buffer = std::make_unique<tf2_ros::Buffer>(node->get_clock());
-  tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
+  tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer, node, true);
 
   //declare parameters
   node->declare_parameter<std::string>("tree_xml_file", "");
@@ -87,10 +87,15 @@ int main(int argc, char **argv)
   // generate xml file
   std::string xml_models = BT::writeTreeNodesModelXML(factory);
   // save to file
-  std::ofstream file(tree_node_model_export_path);
-  file << xml_models;
-  file.close();
-  RCLCPP_INFO(node->get_logger(), "Generated XML file");
+  if (!tree_node_model_export_path.empty()) {
+    std::ofstream file(tree_node_model_export_path);
+    if (file) {
+      file << xml_models;
+      RCLCPP_INFO(node->get_logger(), "Generated XML file");
+    } else {
+      RCLCPP_WARN(node->get_logger(), "Cannot export node model: %s", tree_node_model_export_path.c_str());
+    }
+  }
   
   auto tree = factory.createTreeFromFile(tree_xml_file.c_str());
   std::shared_ptr<BT::Groot2Publisher> groot2publisher_ptr_;

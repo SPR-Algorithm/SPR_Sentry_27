@@ -45,6 +45,7 @@ FakeVelTransform::FakeVelTransform(const rclcpp::NodeOptions & options)
   this->get_parameter("input_cmd_vel_topic", input_cmd_vel_topic_);
   this->get_parameter("output_cmd_vel_topic", output_cmd_vel_topic_);
   this->get_parameter("init_spin_speed", spin_speed_);
+  last_controller_activate_time_ = rclcpp::Time(0, 0, get_clock()->get_clock_type());
 
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
@@ -85,7 +86,7 @@ void FakeVelTransform::cmdSpinCallback(const example_interfaces::msg::Float32::S
 void FakeVelTransform::odometryCallback(const nav_msgs::msg::Odometry::ConstSharedPtr & msg)
 {
   // NOTE: Haven't synced with local_plan
-  if ((rclcpp::Clock().now() - last_controller_activate_time_).seconds() > CONTROLLER_TIMEOUT) {
+  if ((now() - last_controller_activate_time_).seconds() > CONTROLLER_TIMEOUT) {
     current_robot_base_angle_ = tf2::getYaw(msg->pose.pose.orientation);
   }
 }
@@ -96,7 +97,7 @@ void FakeVelTransform::cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr
   const bool is_zero_vel = std::abs(msg->linear.x) < EPSILON && std::abs(msg->linear.y) < EPSILON &&
                            std::abs(msg->angular.z) < EPSILON;
   const bool controller_active =
-    (rclcpp::Clock().now() - last_controller_activate_time_).seconds() <= CONTROLLER_TIMEOUT;
+    (now() - last_controller_activate_time_).seconds() <= CONTROLLER_TIMEOUT;
   if (is_zero_vel) {
     // 清除缓存，避免 syncCallback 在收到零速后仍重复发布上一帧非零速度
     latest_cmd_vel_.reset();
@@ -113,7 +114,7 @@ void FakeVelTransform::cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr
 void FakeVelTransform::localPlanCallback(const nav_msgs::msg::Path::ConstSharedPtr & /*msg*/)
 {
   // Consider nav2_controller_server is activated when receiving local_plan
-  last_controller_activate_time_ = rclcpp::Clock().now();
+  last_controller_activate_time_ = now();
   std::lock_guard<std::mutex> lock(cmd_vel_mutex_);
   latest_cmd_vel_.reset();
 }

@@ -42,9 +42,16 @@ RefereeMockWidget::RefereeMockWidget(const std::shared_ptr<RefereeMockNode>& nod
   build_ui();
   sync_ui_from_node();
 
+  executor_.add_node(node_);
   connect(&spin_timer_, &QTimer::timeout, this, [this]() {
+    if (!rclcpp::ok()) {
+      spin_timer_.stop();
+      publish_timer_.stop();
+      close();
+      return;
+    }
     if (node_) {
-      rclcpp::spin_some(node_);
+      executor_.spin_some();
       node_->tick_decision_output();
       refresh_decision_display();
     }
@@ -316,6 +323,7 @@ void RefereeMockWidget::on_auto_publish_toggled(bool enabled) {
 }
 
 void RefereeMockWidget::on_spin_timer() {
+  if (!rclcpp::ok()) return;
   sync_node_from_ui();
   node_->publish_once();
 }

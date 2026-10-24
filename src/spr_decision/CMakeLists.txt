@@ -93,7 +93,7 @@ install(TARGETS tree_exec_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch config
+install(DIRECTORY launch config behavior_tree
   DESTINATION share/${PROJECT_NAME}
 )
 

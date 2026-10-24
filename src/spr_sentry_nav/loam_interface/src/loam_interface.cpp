@@ -38,7 +38,7 @@ LoamInterfaceNode::LoamInterfaceNode(const rclcpp::NodeOptions & options)
   base_frame_to_lidar_initialized_ = false;
 
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
+  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_, this, true);
 
   pcd_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("registered_scan", 5);
   odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("lidar_odometry", 5);
@@ -53,6 +53,9 @@ LoamInterfaceNode::LoamInterfaceNode(const rclcpp::NodeOptions & options)
 
 void LoamInterfaceNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
 {
+  if (!base_frame_to_lidar_initialized_) {
+    return;  // TF is initialized by odometry; never transform with an uninitialized matrix.
+  }
   // NOTE: Input point cloud message is based on the `lidar_odom`
   // Here we transform it to the REAL `odom` frame
   auto out = std::make_shared<sensor_msgs::msg::PointCloud2>();

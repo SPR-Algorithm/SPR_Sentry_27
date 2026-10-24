@@ -1,31 +1,28 @@
-cd ~/SPR_Sentry_27
-colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
-cmds=( 
+#!/usr/bin/env bash
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." || exit 1
+source /opt/ros/humble/setup.bash || exit 1
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release || exit 1
+
+# 手动移动建图：SLAM + 数据处理，不启动导航/决策，不读取已有地图。
+# 同时建立二维地图（SLAM Toolbox）和三维点云地图（Point-LIO）；保存命令见末尾。
+# 模型单独启动，主入口不重复发布模型 TF；实车统一使用系统时间。
+cmds=(
   "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_sentry_serial spr_sentry_serial_launch.py"
-  "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_robot_description robot_description_launch.py"
-  "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_nav_bringup bringup_launch.py mode:=slam use_navigation:=false use_robot_state_pub:=False"
-  #"ros2 bag play rosbag2_2025_05_27-19_02_42" #6.23
-  #"source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 bag record   /red_standard_robot1/tf  /red_standard_robot1/tf_static  /red_standard_robot1/livox/imu   /red_standard_robot1/livox/lidar"
- # "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 bag record   /red_standard_robot1/serial/gimbal_joint_state   /red_standard_robot1/livox/imu   /red_standard_robot1/livox/lidar"
-	)
+  "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_robot_description robot_description_launch.py use_sim_time:=false use_rviz:=false"
+  "source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch spr_nav_bringup bringup_launch.py mode:=slam use_navigation:=false use_decision:=false use_robot_state_pub:=false use_sim_time:=false"
+)
 
 for cmd in "${cmds[@]}";
 do
   echo "Current CMD : $cmd"
-  gnome-terminal -- bash -c "cd $(pwd); $cmd; exec bash"
+  gnome-terminal -- bash -c "cd \"$PWD\" && $cmd; exec bash"
   sleep 0.5
 done
-#    ros2 run nav2_map_server map_saver_cli -f ground2
+
+# 建图结束前，在已 source 工作空间的终端保存二维地图（文件名按需修改）：
 # ros2 run nav2_map_server map_saver_cli -f map_0711 --ros-args -r __ns:=/red_standard_robot1
 
-
-
-
-#   ros2 service call /red_standard_robot1/slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: '/home/spr/nav2_ws_slam/map_0711.pbstream'}"
-
-
-
-
-
-
-
+# 可选：保存 SLAM Toolbox 位姿图，用于后续继续建图（不是 PCD/PGM，也不是 .pbstream）：
+# ros2 service call /red_standard_robot1/slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: '/absolute/path/map_0711'}"
+# 保存二维地图后，对主 launch 按 Ctrl+C 正常退出，Point-LIO 将保存 PCD/scans.pcd。
+# PCD 位于 src/spr_sentry_nav/point_lio/PCD/，会覆盖同名旧文件，建图前注意备份。

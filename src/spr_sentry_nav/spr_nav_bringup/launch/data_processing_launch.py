@@ -25,6 +25,29 @@ from launch_ros.descriptions import ComposableNode, ParameterFile, ParameterValu
 from nav2_common.launch import RewrittenYaml
 
 
+def _declare_arguments():
+    # 内部参数，由实时/回放主入口传入；params_file 已完成占位替换。
+    arguments = [
+        DeclareLaunchArgument("params_file", description="主入口处理后的参数YAML路径"),
+        DeclareLaunchArgument("namespace", default_value="", description="YAML命名空间；节点命名空间由父launch设置"),
+        DeclareLaunchArgument("mode", default_value="localization", choices=["slam", "localization"], description="决定Point-LIO配置及是否转换LaserScan"),
+        DeclareLaunchArgument("prior_pcd_file", default_value="", description="定位时Point-LIO的先验PCD路径，是否加载仍由YAML决定"),
+        DeclareLaunchArgument("container_name", default_value="nav2_container", description="主入口已创建的组件容器"),
+        DeclareLaunchArgument("log_level", default_value="info", description="日志级别"),
+    ]
+    for name, default, description in [
+        ("use_live_lidar", "true", "内部开关：实时启动Livox与merge；回放入口固定为false"),
+        ("use_sim_time", "false", "使用/clock"),
+        ("use_composition", "true", "将可组件化的数据处理节点加载进共享容器"),
+        ("use_respawn", "false", "独立节点异常退出后重启"),
+    ]:
+        arguments.append(DeclareLaunchArgument(
+            name, default_value=default, choices=["true", "false", "True", "False"],
+            description=description,
+        ))
+    return arguments
+
+
 def _setup(context):
     def value(name):
         return LaunchConfiguration(name).perform(context)
@@ -34,7 +57,6 @@ def _setup(context):
 
     namespace = value("namespace")
     use_live_lidar = enabled("use_live_lidar")
-    driver_bag = use_live_lidar and value("livox_output_mode") == "bag"
     configured_params = ParameterFile(RewrittenYaml(
         source_file=value("params_file"), root_key=namespace,
         param_rewrites={"use_sim_time": value("use_sim_time")}, convert_types=True,
@@ -47,16 +69,8 @@ def _setup(context):
     if use_live_lidar:
         actions.append(Node(
             package="livox_ros_driver2", executable="livox_ros_driver2_node", name="livox_ros_driver2",
-            parameters=[configured_params, {
-                "output_data_type": 1 if driver_bag else 0,
-                "rosbag_path": ParameterValue(value("rosbag_path"), value_type=str),
-                "enable_lidar_bag": enabled("enable_lidar_bag"),
-                "enable_imu_bag": enabled("enable_imu_bag"),
-            }], **options,
+            parameters=[configured_params, {"output_data_type": 0}], **options,
         ))
-    # 驱动内部录制不发布 ROS 数据，不启动等待点云/IMU的后续节点。
-    if driver_bag:
-        return actions
 
     if use_live_lidar:
         actions.append(Node(
@@ -128,27 +142,4 @@ def _setup(context):
 
 
 def generate_launch_description():
-    # 内部参数，由实时/回放主入口传入；params_file 已完成占位替换。
-    arguments = [
-        DeclareLaunchArgument("params_file", description="主入口处理后的参数YAML路径"),
-        DeclareLaunchArgument("namespace", default_value="", description="YAML命名空间；节点命名空间由父launch设置"),
-        DeclareLaunchArgument("mode", default_value="localization", choices=["slam", "localization"], description="决定Point-LIO配置及是否转换LaserScan"),
-        DeclareLaunchArgument("prior_pcd_file", default_value="", description="定位时Point-LIO的先验PCD路径，是否加载仍由YAML决定"),
-        DeclareLaunchArgument("container_name", default_value="nav2_container", description="主入口已创建的组件容器"),
-        DeclareLaunchArgument("log_level", default_value="info", description="日志级别"),
-        DeclareLaunchArgument("livox_output_mode", default_value="ros", choices=["ros", "bag"], description="发布ROS话题 / 仅驱动内部录制"),
-        DeclareLaunchArgument("rosbag_path", default_value="livox_rosbag2", description="Livox内部录制目录"),
-    ]
-    for name, default, description in [
-        ("use_live_lidar", "true", "内部开关：实时启动Livox与merge；回放入口固定为false"),
-        ("use_sim_time", "false", "使用/clock"),
-        ("use_composition", "true", "将可组件化的数据处理节点加载进共享容器"),
-        ("use_respawn", "false", "独立节点异常退出后重启"),
-        ("enable_lidar_bag", "true", "Livox内部录制点云"),
-        ("enable_imu_bag", "true", "Livox内部录制IMU"),
-    ]:
-        arguments.append(DeclareLaunchArgument(
-            name, default_value=default, choices=["true", "false", "True", "False"],
-            description=description,
-        ))
-    return LaunchDescription([*arguments, OpaqueFunction(function=_setup)])
+    return LaunchDescription([*_declare_arguments(), OpaqueFunction(function=_setup)])

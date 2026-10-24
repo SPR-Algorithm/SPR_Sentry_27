@@ -8,13 +8,29 @@
   <license>Apache-2.0</license>
   <author email="3377509679@qq.com">kest</author>
 
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
   <build_depend>navigation2</build_depend>
   <build_depend>nav2_common</build_depend>
   <build_depend>launch_ros</build_depend>
 
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>loam_interface</exec_depend>
+  <exec_depend>sensor_scan_generation</exec_depend>
+  <exec_depend>fake_vel_transform</exec_depend>
+  <exec_depend>spr_robot_description</exec_depend>
+  <exec_depend>spr_decision</exec_depend>
+  <exec_depend>spr_referee_mock</exec_depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>geometry_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <exec_depend>rosbag2</exec_depend>
+  <exec_depend>rosbag2_storage_default_plugins</exec_depend>
   <exec_depend>navigation2</exec_depend>
   <exec_depend>nav2_common</exec_depend>
   <exec_depend>spr_nav2_plugins</exec_depend>

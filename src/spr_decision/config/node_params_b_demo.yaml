@@ -1,7 +1,7 @@
 tree_exec:
   ros__parameters:
-    tree_node_model_export_path: /home/spr/new_ws/src/spr_decision/behavior_tree/tree_nodes.xml
-    tree_xml_file: /home/spr/new_ws/src/spr_decision/behavior_tree/RMUC_adaptation_2026_B_demo.xml
+    tree_node_model_export_path: ""  # 仅调试导出时填写可写路径，正常启动不覆盖源码
+    tree_xml_file: $(find-pkg-share spr_decision)/behavior_tree/RMUC_adaptation_2026_B_demo.xml
     tick_period_milliseconds: 100
     groot_port: 5556
     attack_distance: 2.0

@@ -32,7 +32,7 @@ SensorScanGenerationNode::SensorScanGenerationNode(const rclcpp::NodeOptions & o
   this->get_parameter("robot_base_frame", robot_base_frame_);
 
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
+  tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_, this, true);
   br_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
   pub_laser_cloud_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("sensor_scan", 2);
@@ -70,8 +70,14 @@ void SensorScanGenerationNode::laserCloudAndOdometryHandler(
   tf2::Transform tf_odom_to_lidar;
 
   tf2::fromMsg(odometry_msg->pose.pose, tf_odom_to_lidar);
-  tf_lidar_to_robot_base_ = getTransform(lidar_frame_, robot_base_frame_, pcd_msg->header.stamp);
-  tf_lidar_to_chassis = getTransform(lidar_frame_, base_frame_, pcd_msg->header.stamp);
+  try {
+    tf_lidar_to_robot_base_ = getTransform(lidar_frame_, robot_base_frame_, pcd_msg->header.stamp);
+    tf_lidar_to_chassis = getTransform(lidar_frame_, base_frame_, pcd_msg->header.stamp);
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+      "Missing model TF; skipping scan/odometry instead of using identity: %s", ex.what());
+    return;
+  }
 
   tf_odom_to_chassis = tf_odom_to_lidar * tf_lidar_to_chassis;
   tf_odom_to_robot_base = tf_odom_to_lidar * tf_lidar_to_robot_base_;
@@ -89,16 +95,11 @@ void SensorScanGenerationNode::laserCloudAndOdometryHandler(
 tf2::Transform SensorScanGenerationNode::getTransform(
   const std::string & target_frame, const std::string & source_frame, const rclcpp::Time & time)
 {
-  try {
-    auto transform_stamped = tf_buffer_->lookupTransform(
-      target_frame, source_frame, time, rclcpp::Duration::from_seconds(0.5));
-    tf2::Transform transform;
-    tf2::fromMsg(transform_stamped.transform, transform);
-    return transform;
-  } catch (tf2::TransformException & ex) {
-    RCLCPP_WARN(this->get_logger(), "TF lookup failed: %s. Returning identity.", ex.what());
-    return tf2::Transform::getIdentity();
-  }
+  auto transform_stamped = tf_buffer_->lookupTransform(
+    target_frame, source_frame, time, rclcpp::Duration::from_seconds(0.5));
+  tf2::Transform transform;
+  tf2::fromMsg(transform_stamped.transform, transform);
+  return transform;
 }
 
 void SensorScanGenerationNode::publishTransform(
@@ -128,19 +129,14 @@ void SensorScanGenerationNode::publishOdometry(
   out.pose.pose.position.z = origin.z();
   out.pose.pose.orientation = tf2::toMsg(transform.getRotation());
 
-  static tf2::Transform previous_transform;
-  static auto previous_time = std::chrono::steady_clock::now();
-  const auto current_time = std::chrono::steady_clock::now();
-
-  const double dt =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(current_time - previous_time).count() *
-    1e-9;
-
+  // First frame and clock rewind have no valid velocity delta. Use sensor time
+  // so bag playback speed and callback scheduling do not change reported speed.
+  const double dt = has_previous_odometry_ ? (stamp - previous_stamp_).seconds() : 0.0;
   if (dt > 0) {
-    const auto linear_velocity = (transform.getOrigin() - previous_transform.getOrigin()) / dt;
+    const auto linear_velocity = (transform.getOrigin() - previous_transform_.getOrigin()) / dt;
 
     const tf2::Quaternion q_diff =
-      transform.getRotation() * previous_transform.getRotation().inverse();
+      transform.getRotation() * previous_transform_.getRotation().inverse();
     const auto angular_velocity = q_diff.getAxis() * q_diff.getAngle() / dt;
 
     out.twist.twist.linear.x = linear_velocity.x();
@@ -151,8 +147,9 @@ void SensorScanGenerationNode::publishOdometry(
     out.twist.twist.angular.z = angular_velocity.z();
   }
 
-  previous_transform = transform;
-  previous_time = current_time;
+  previous_transform_ = transform;
+  previous_stamp_ = stamp;
+  has_previous_odometry_ = true;
 
   pub_chassis_odometry_->publish(out);
 }
