@@ -56,6 +56,9 @@ private:
 
   int num_threads_;
   int num_neighbors_;
+  int max_iterations_;
+  double min_inlier_ratio_;
+  double height_filter_max_z_;
   float global_leaf_size_;
   float registered_leaf_size_;
   float max_dist_sq_;
@@ -80,7 +83,6 @@ private:
   pcl::PointCloud<pcl::PointCovariance>::Ptr source_;
 
   std::shared_ptr<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>> target_tree_;
-  std::shared_ptr<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>> source_tree_;
   std::shared_ptr<
     small_gicp::Registration<small_gicp::GICPFactor, small_gicp::ParallelReductionOMP>>
     register_;

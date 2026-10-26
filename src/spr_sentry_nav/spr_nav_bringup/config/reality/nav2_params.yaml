@@ -188,7 +188,11 @@ small_gicp_relocalization:
     num_neighbors: 20
     global_leaf_size: 0.1
     registered_leaf_size: 0.05
-    max_dist_sq: 3.0
+    max_dist_sq: 3.0                  # 对应点最大距离的平方，单位 m²；3.0 对应约 1.73m
+    max_iterations: 30               # 旧实现写死 10；裁剪后可能在迭代上限前未收敛
+    min_inlier_ratio: 0.1            # 至少 num_neighbors 个内点，且占源点云不低于此比例
+    height_filter:
+      max_z: 2.0                    # map 坐标 z 上限(m)，z>上限才删除；0.0 不裁剪；非当地离地高度
     map_frame: "map"
     odom_frame: "odom"
     base_frame: "base_footprint"

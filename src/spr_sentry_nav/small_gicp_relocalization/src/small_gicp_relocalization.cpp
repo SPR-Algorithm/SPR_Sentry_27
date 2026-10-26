@@ -15,8 +15,11 @@
 #include "small_gicp_relocalization/small_gicp_relocalization.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
+
+#include "small_gicp_relocalization/height_filter.hpp"
 
 #include "pcl/common/transforms.h"
 #include "pcl_conversions/pcl_conversions.h"
@@ -37,6 +40,9 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->declare_parameter("global_leaf_size", 0.25);
   this->declare_parameter("registered_leaf_size", 0.25);
   this->declare_parameter("max_dist_sq", 1.0);
+  this->declare_parameter("max_iterations", 30);
+  this->declare_parameter("min_inlier_ratio", 0.1);
+  this->declare_parameter("height_filter.max_z", 0.0);
   this->declare_parameter("map_frame", "map");
   this->declare_parameter("odom_frame", "odom");
   this->declare_parameter("base_frame", "");
@@ -51,6 +57,9 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("global_leaf_size", global_leaf_size_);
   this->get_parameter("registered_leaf_size", registered_leaf_size_);
   this->get_parameter("max_dist_sq", max_dist_sq_);
+  this->get_parameter("max_iterations", max_iterations_);
+  this->get_parameter("min_inlier_ratio", min_inlier_ratio_);
+  this->get_parameter("height_filter.max_z", height_filter_max_z_);
   this->get_parameter("map_frame", map_frame_);
   this->get_parameter("odom_frame", odom_frame_);
   this->get_parameter("base_frame", base_frame_);
@@ -60,7 +69,9 @@ SmallGicpRelocalizationNode::SmallGicpRelocalizationNode(const rclcpp::NodeOptio
   this->get_parameter("init_pose", init_pose_);
   this->get_parameter("input_cloud_topic", input_cloud_topic_);
 
-  if (num_threads_ <= 0 || num_neighbors_ < 3 ||
+  if (num_threads_ <= 0 || num_neighbors_ < 5 || max_iterations_ <= 0 ||
+    !std::isfinite(height_filter_max_z_) ||
+    !std::isfinite(min_inlier_ratio_) || min_inlier_ratio_ < 0 || min_inlier_ratio_ > 1 ||
     !std::isfinite(global_leaf_size_) || global_leaf_size_ <= 0 ||
     !std::isfinite(registered_leaf_size_) || registered_leaf_size_ <= 0 ||
     !std::isfinite(max_dist_sq_) || max_dist_sq_ <= 0 || init_pose_.size() != 6)
@@ -150,9 +161,14 @@ bool SmallGicpRelocalizationNode::initializeTarget()
     pcl::PointCloud<pcl::PointXYZ> transformed;
     pcl::transformPointCloud(
       *global_map_, transformed, tf2::transformToEigen(transform.transform).matrix());
+    const auto filtered = filterByMapHeight(
+      transformed, Eigen::Isometry3d::Identity(), height_filter_max_z_);
+    RCLCPP_INFO(
+      get_logger(), "GICP map height filter=%d max_z=%.3fm: %zu -> %zu points",
+      height_filter_max_z_ != 0.0, height_filter_max_z_, transformed.size(), filtered->size());
     auto target = small_gicp::voxelgrid_sampling_omp<
       pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(
-      transformed, global_leaf_size_);
+      *filtered, global_leaf_size_, num_threads_);
     if (target->size() < static_cast<size_t>(num_neighbors_)) {
       RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 5000, "GICP map too sparse after filtering");
       return false;
@@ -174,6 +190,12 @@ void SmallGicpRelocalizationNode::registeredPcdCallback(
 {
   if (!target_tree_) {
     return;  // Do not accumulate unbounded scans while robot TF is absent.
+  }
+  if (msg->header.frame_id != odom_frame_) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000, "GICP requires cloud frame '%s', received '%s'",
+      odom_frame_.c_str(), msg->header.frame_id.c_str());
+    return;
   }
   last_scan_time_ = msg->header.stamp;
   current_scan_frame_id_ = msg->header.frame_id;
@@ -197,38 +219,64 @@ void SmallGicpRelocalizationNode::performRegistration()
     return;
   }
 
+  const auto start = std::chrono::steady_clock::now();
+  // registered_scan is already in odom. Classify height using the current
+  // map<-odom estimate, without moving the source out of odom or flattening z.
+  const auto filtered = filterByMapHeight(
+    *accumulated_cloud_, previous_result_t_, height_filter_max_z_);
   source_ = small_gicp::voxelgrid_sampling_omp<
     pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::PointCovariance>>(
-    *accumulated_cloud_, registered_leaf_size_);
+    *filtered, registered_leaf_size_, num_threads_);
 
   if (source_->size() < static_cast<size_t>(num_neighbors_)) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000,
+      "GICP source too sparse: raw=%zu height_filtered=%zu sampled=%zu required=%d",
+      accumulated_cloud_->size(), filtered->size(), source_->size(), num_neighbors_);
     accumulated_cloud_->clear();
     return;
   }
 
   small_gicp::estimate_covariances_omp(*source_, num_neighbors_, num_threads_);
 
-  source_tree_ = std::make_shared<small_gicp::KdTree<pcl::PointCloud<pcl::PointCovariance>>>(
-    source_, small_gicp::KdTreeBuilderOMP(num_threads_));
-
-  if (!source_ || !source_tree_) {
-    return;
-  }
-
   register_->reduction.num_threads = num_threads_;
   register_->rejector.max_dist_sq = max_dist_sq_;
-  register_->optimizer.max_iterations = 10;
+  register_->optimizer.max_iterations = max_iterations_;
 
+  const auto align_start = std::chrono::steady_clock::now();
   auto result = register_->align(*target_, *source_, *target_tree_, previous_result_t_);
 
-  if (result.converged && result.num_inliers > 0 && result.T_target_source.matrix().allFinite()) {
+  const double inlier_ratio = static_cast<double>(result.num_inliers) / source_->size();
+  const auto finish = std::chrono::steady_clock::now();
+  const double preprocess_ms =
+    std::chrono::duration<double, std::milli>(align_start - start).count();
+  const double align_ms = std::chrono::duration<double, std::milli>(finish - align_start).count();
+  RCLCPP_DEBUG(
+    get_logger(),
+    "GICP raw=%zu height_filtered=%zu source=%zu target=%zu "
+    "inliers=%zu ratio=%.3f iterations=%zu/%d "
+    "preprocess=%.1fms align=%.1fms",
+    accumulated_cloud_->size(), filtered->size(), source_->size(), target_->size(),
+    result.num_inliers, inlier_ratio,
+    result.iterations + 1, max_iterations_, preprocess_ms, align_ms);
+
+  if (result.converged && result.num_inliers >= static_cast<size_t>(num_neighbors_) &&
+    inlier_ratio >= min_inlier_ratio_ && result.T_target_source.matrix().allFinite() &&
+    result.H.allFinite() && std::isfinite(result.error))
+  {
     result_t_ = previous_result_t_ = result.T_target_source;
     // No heartbeat on failure: the manager must distinguish fresh matches from held TF.
     if (!publish_tf_) {
       publishTransform();
     }
   } else {
-    RCLCPP_WARN(this->get_logger(), "GICP did not converge.");
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000,
+      "GICP rejected: converged=%d inliers=%zu/%zu (%.3f, required %.3f) "
+      "iterations=%zu/%d preprocess=%.1fms align=%.1fms; "
+      "check initial pose, overlap and retained geometry",
+      result.converged, result.num_inliers, source_->size(), inlier_ratio, min_inlier_ratio_,
+      result.iterations + 1, max_iterations_, preprocess_ms, align_ms);
   }
 
   accumulated_cloud_->clear();
